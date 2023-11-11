@@ -1,0 +1,17 @@
+[package]
+name = "tp"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix = "0.13.1"
+actix-rt = "2.9.0"
+clap = { version = "4.4.8", features = ["derive"] }
+serde = "1.0.192"
+tokio = "1.34.0"
+
+[[bin]]
+name="ecommerce"
+path="src/bin/ecommerce.rs"
