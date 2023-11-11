@@ -5,6 +5,7 @@ use clap::{builder::PossibleValue, ValueEnum};
 pub enum Verbosity {
     Debug,
     Info,
+    Warn,
     Error,
     Fatal,
 }
@@ -36,6 +37,7 @@ impl ValueEnum for Verbosity {
         &[
             Verbosity::Debug,
             Verbosity::Info,
+            Verbosity::Warn,
             Verbosity::Error,
             Verbosity::Fatal,
         ]
@@ -46,6 +48,8 @@ impl ValueEnum for Verbosity {
             Verbosity::Debug => PossibleValue::new("debug").help("Log everything"),
             Verbosity::Info => PossibleValue::new("info")
                 .help("Log whenever something important happens and onwards."),
+            Verbosity::Warn => PossibleValue::new("warn")
+                .help("Log whenever some runtime error, easily recoverable happens and onwards."),
             Verbosity::Error => PossibleValue::new("error")
                 .help("Log whenever something fails, but it can be recovered and onwards"),
             Verbosity::Fatal => {
@@ -58,7 +62,7 @@ impl ValueEnum for Verbosity {
 #[macro_export]
 macro_rules! debug {
     ($text: expr) => {{
-        if tp::common::log::Verbosity::Debug as u8 >= tp::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed) {
+        if crate::common::log::Verbosity::Debug as u8 >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed) {
             println!("DEBUG: {}", $text)
         }
     }};
@@ -67,16 +71,26 @@ macro_rules! debug {
 #[macro_export]
 macro_rules! info {
     ($text: expr) => {{
-        if tp::common::log::Verbosity::Info as u8 >= tp::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed) {
+        if crate::common::log::Verbosity::Info as u8 >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed) {
             println!("INFO: {}", $text)
         }
     }};
 }
 
 #[macro_export]
+macro_rules! warn {
+    ($text: expr) => {{
+        if crate::common::log::Verbosity::Warn as u8 >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed) {
+            println!("WARN: {}", $text)
+        }
+    }};
+}
+
+
+#[macro_export]
 macro_rules! error {
     ($text: expr) => {{
-        if tp::common::log::Verbosity::Error as u8 >= tp::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed) {
+        if crate::common::log::Verbosity::Error as u8 >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed) {
             println!("ERROR: {}", $text)
         }
     }};
@@ -85,7 +99,7 @@ macro_rules! error {
 #[macro_export]
 macro_rules! fatal {
     ($text: expr) => {{
-        if tp::common::log::Verbosity::Fatal as u8 >= tp::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed) {
+        if crate::common::log::Verbosity::Fatal as u8 >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed) {
             println!("FATAL: {}", $text)
         }
     }};
