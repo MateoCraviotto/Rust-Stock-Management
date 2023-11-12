@@ -11,7 +11,18 @@ async fn main() -> anyhow::Result<()>{
     
     println!("Starting the Local process in port in address: {}:{}", args.ip, args.port);
 
-    start(args.ip, args.port).await
+    let result = start(args.ip, args.port).await;
+
+    match &result{
+        Ok(_) => {
+            println!("Goodbye :)");
+        },
+        Err(_) => {
+            println!("There was an error while running the program");
+        },
+    };
+
+    return result;
 }
 
 async fn start(ip : Ipv4Addr, port: u16) -> anyhow::Result<()>{

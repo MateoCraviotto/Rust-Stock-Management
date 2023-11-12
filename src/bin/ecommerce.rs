@@ -10,12 +10,12 @@ async fn main() -> anyhow::Result<()>{
     log_level!(args.verbosity);
     println!("Running E-Commerce which will connect to {}:{}", args.ip, args.port);
 
-    // let mut client = TcpStream::connect(format!("{}:{}", args.ip, args.port)).await?;
-    // loop{
-    //     println!("Sending data to local");
-    //     client.write_all("Sending this data".as_bytes()).await?;
-    //     tokio::time::sleep(Duration::from_secs(1)).await;
-    // }
+    let mut client = TcpStream::connect(format!("{}:{}", args.ip, args.port)).await?;
+    loop{
+        println!("Sending data to local");
+        client.write_all("Sending this data\n".as_bytes()).await?;
+        tokio::time::sleep(Duration::from_secs(10)).await;
+    }
 
     Ok(())
 }

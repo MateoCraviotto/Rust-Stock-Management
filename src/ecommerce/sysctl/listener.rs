@@ -26,12 +26,18 @@ pub async fn listen_commands(net: Addr<Listener>) -> anyhow::Result<()> {
                         break 'main;
                     },
                     Command::NetUp => {
-                        info!("Network Down order was given");
+                        info!("Network Up order was given");
                         t.push(start_listener(net.clone()));
+                        println!("Network was connected");
                     },
                     Command::NetDown => {
-                        info!("Network Up order was given");
+                        info!("Network Down order was given");
                         let _ = net.do_send(ListenerState::Down);
+                        // Await all current messages to have a 'clean' environment
+                        // in next iteration. Will block until all disconnections happened
+                        let _ = futures::future::join_all(t).await;
+                        t = vec![];
+                        println!("Network was disconnected");
                     },
                     Command::Sell(o) => {
                         info!(format!("New order was issued: {:?}", o));
@@ -52,18 +58,16 @@ pub async fn listen_commands(net: Addr<Listener>) -> anyhow::Result<()> {
     }
 
     let _ = futures::future::join_all(t).await;
-
     Ok(())
 }
 
+/// Awaits a message of start in order to handle the error in case they happen
 fn start_listener(net: Addr<Listener>) -> JoinHandle<()>{
     tokio::spawn(async move{
         match net.send(ListenerState::Start).await {
             Ok(v) => {
                 match v{
-                    Ok(_) => {
-                        info!("TCP Listener gracefully shot down");
-                    },
+                    Ok(_) => {},
                     Err(e) => {
                         error!(format!("There was an error in the TCP connection: {:?}", e))
                     },
