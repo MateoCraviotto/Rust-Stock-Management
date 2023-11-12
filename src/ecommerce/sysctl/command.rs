@@ -18,12 +18,13 @@ impl FromStr for Command{
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let clean = s.trim_start();
         let first = clean.as_bytes().get(0).ok_or(anyhow!("The command must be at least 1 ASCII character long with"))?;
-        match first{
-            b'S' | b's' => Ok(Command::Shutdown),
-            b'U' | b'u' => Ok(Command::NetUp),
-            b'D' | b'd' => Ok(Command::NetDown),
-            b'O' | b'o' => Ok(Command::Sell(Order::from_str(&clean[1..])?)),
-            b'F' | b'f' => Ok(Command::SellFromFile(parse_file(&clean[1..])?)),
+        let second = clean.as_bytes().get(1).unwrap_or(&b' ');
+        match (first,second){
+            (b'S' | b's', b' ')=> Ok(Command::Shutdown),
+            (b'U' | b'u', b' ') => Ok(Command::NetUp),
+            (b'D' | b'd', b' ') => Ok(Command::NetDown),
+            (b'O' | b'o', b' ') => Ok(Command::Sell(Order::from_str(&clean[1..])?)),
+            (b'F' | b'f', b' ') => Ok(Command::SellFromFile(parse_file(&clean[1..])?)),
             _ => bail!("Valid Commands are: S (Shutdown), U (NetUp), D (NetDown), O (Order) <Order>, F (Orders From File) <FilePath>")
         }
     }
@@ -84,5 +85,12 @@ mod test{
         assert_eq!(Command::NetDown, netdown);
         assert_eq!(Command::Sell(Order::new(1u64, 1u64)), order);
         assert_eq!(Command::SellFromFile("Something".to_owned()), from_file);
+    }
+
+    #[test]
+    fn cmd_need_space_between_words() {
+        let shutdown = Command::from_str("   smore");
+
+        assert!(shutdown.is_err());
     }
 }

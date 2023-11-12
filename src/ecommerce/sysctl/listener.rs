@@ -5,7 +5,6 @@ use tokio::{io::{BufReader, AsyncBufReadExt}, task::JoinHandle};
 
 use crate::{ecommerce::{sysctl::command::Command, network::{listen::Listener, ListenerState}}, error, info};
 
-
 pub async fn listen_commands(net: Addr<Listener>) -> anyhow::Result<()> {
     println!("Reading commands from STDIN");
 
@@ -79,4 +78,9 @@ fn start_listener(net: Addr<Listener>) -> JoinHandle<()>{
 
 fn print_commands(){
     println!("The valid commands are:");
+    println!("\t S | s For shutting down the whole application");
+    println!("\t U | u To get the Network Up");
+    println!("\t D | d For bringing down the Network");
+    println!("\t O | o <product_id>,<quantity> For giving a new order to the system");
+    println!("\t F | f <FilePath> For giving a new set of orders to the system. It will read the orders from the given filepath");
 }

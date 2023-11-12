@@ -70,13 +70,15 @@ impl Handler<ListenerState> for Listener{
 }
 
 async fn start_listening(to: String, cancel: CancellationToken) -> anyhow::Result<()>{
-    let listener = TcpListener::bind(to).await?;
+    let listener = TcpListener::bind(&to).await?;
     let mut connected: Vec<Addr<Communication>> = vec![];
 
     'accept: loop{
+        info!(format!("Listening in {}", &to));
         select! {
             conn_result = listener.accept() => {
-                let (stream, _) = conn_result?;
+                let (stream, addr) = conn_result?;
+                info!(format!("New connection for {}", addr));
                 connected.push(Communication::new(stream).start())
             }
 
