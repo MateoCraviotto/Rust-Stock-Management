@@ -15,7 +15,7 @@ pub struct Communication{
 }
 
 impl Communication{
-    pub fn new(stream: TcpStream, store: Store) -> (Self, JoinHandle<anyhow::Result<()>>){
+    pub fn new(stream: TcpStream, store: Arc<Mutex<Store>>) -> (Self, JoinHandle<anyhow::Result<()>>){
         let mine = CancellationToken::new();
         let pair = mine.clone();
         let arc_stream = Arc::new(Mutex::new(stream));
@@ -63,9 +63,10 @@ impl Handler<ListenerState> for Communication{
     }
 }
 
-async fn serve(stream: Arc<Mutex<TcpStream>>, token: CancellationToken, store: Store) -> anyhow::Result<()> {
+async fn serve(stream: Arc<Mutex<TcpStream>>, token: CancellationToken, store: Arc<Mutex<Store>>) -> anyhow::Result<()> {
     'serving: loop{
         debug!(format!("Waiting for data or connection or cancellation. {:?}", token));
+        let store_clone = store.clone();
         select! {
             r = read_socket(stream.clone()) => {
                 let data = match r {
@@ -79,7 +80,7 @@ async fn serve(stream: Arc<Mutex<TcpStream>>, token: CancellationToken, store: S
                 println!("RECEIVED: {}", data);
                 match Order::from_str(&data){
                     Ok(o) => {
-                        let order_state = store.clone().manage_order(o);
+                        let order_state = store_clone.as_ref().lock().await.manage_order(o);
                         match order_state {
                             PurchaseState::Reserve => {
                                 println!("Stock reserved");

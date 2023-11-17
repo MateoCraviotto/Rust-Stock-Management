@@ -9,7 +9,8 @@ pub enum Command {
     NetUp,
     NetDown,
     Sell(Order),
-    SellFromFile(String)
+    SellFromFile(String),
+    AddStock(Order)
 }
 
 impl FromStr for Command{
@@ -25,7 +26,8 @@ impl FromStr for Command{
             (b'D' | b'd', b' ') => Ok(Command::NetDown),
             (b'O' | b'o', b' ') => Ok(Command::Sell(Order::from_str(&clean[1..])?)),
             (b'F' | b'f', b' ') => Ok(Command::SellFromFile(parse_file(&clean[1..])?)),
-            _ => bail!("Valid Commands are: S (Shutdown), U (NetUp), D (NetDown), O (Order) <Order>, F (Orders From File) <FilePath>")
+            (b'A' | b'a', b' ') => Ok(Command::AddStock(Order::from_str(&clean[1..])?)),
+            _ => bail!("Valid Commands are: S (Shutdown), U (NetUp), D (NetDown), O (Order) <Order>, F (Orders From File) <FilePath>, A (AddStock)")
         }
     }
 }
@@ -49,12 +51,14 @@ mod test{
         let netdown = Command::from_str("D").expect("Command was not properly parsed");
         let order = Command::from_str("O 1,1").expect("Command was not properly parsed");
         let from_file = Command::from_str("F Something").expect("Command was not properly parsed");
+        let add_stock = Command::from_str("A 1,1").expect("Command was not properly parsed");
 
         assert_eq!(Command::Shutdown, shutdown);
         assert_eq!(Command::NetUp, netup);
         assert_eq!(Command::NetDown, netdown);
         assert_eq!(Command::Sell(Order::new(1u64, 1u64)), order);
         assert_eq!(Command::SellFromFile("Something".to_owned()), from_file);
+        assert_eq!(Command::AddStock(Order::new(1u64, 1u64)), add_stock);
     }
 
     #[test]
@@ -64,12 +68,14 @@ mod test{
         let netdown = Command::from_str("d").expect("Command was not properly parsed");
         let order = Command::from_str("o 1,1").expect("Command was not properly parsed");
         let from_file = Command::from_str("f Something").expect("Command was not properly parsed");
+        let add_stock = Command::from_str("a 1,1").expect("Command was not properly parsed");
 
         assert_eq!(Command::Shutdown, shutdown);
         assert_eq!(Command::NetUp, netup);
         assert_eq!(Command::NetDown, netdown);
         assert_eq!(Command::Sell(Order::new(1u64, 1u64)), order);
         assert_eq!(Command::SellFromFile("Something".to_owned()), from_file);
+        assert_eq!(Command::AddStock(Order::new(1u64, 1u64)), add_stock);
     }
 
     #[test]
@@ -79,12 +85,14 @@ mod test{
         let netdown = Command::from_str("   d").expect("Command was not properly parsed");
         let order = Command::from_str("   o    1   ,   1").expect("Command was not properly parsed");
         let from_file = Command::from_str("   f     Something").expect("Command was not properly parsed");
+        let add_stock = Command::from_str("   a    1   ,   1").expect("Command was not properly parsed");
 
         assert_eq!(Command::Shutdown, shutdown);
         assert_eq!(Command::NetUp, netup);
         assert_eq!(Command::NetDown, netdown);
         assert_eq!(Command::Sell(Order::new(1u64, 1u64)), order);
         assert_eq!(Command::SellFromFile("Something".to_owned()), from_file);
+        assert_eq!(Command::AddStock(Order::new(1u64, 1u64)), add_stock);
     }
 
     #[test]

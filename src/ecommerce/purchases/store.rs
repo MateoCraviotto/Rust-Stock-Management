@@ -74,6 +74,7 @@ impl Store {
     pub fn manage_order(&mut self, order: Order) -> PurchaseState {
         let id = order.get_product();
         let qty = order.get_qty();
+        println!("Current products: {:?}", self.get_products());
         if self.products.contains_key(&id) {
             let current_quantity = self.products[&id];
             if current_quantity >= qty {

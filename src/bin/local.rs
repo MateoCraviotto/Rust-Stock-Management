@@ -1,8 +1,9 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, sync::Arc};
 
 use actix::Actor;
 use clap::Parser;
-use tp::{local::args::Args, log_level, ecommerce::{sysctl::listener::listen_commands, network::listen::Listener}};
+use tokio::sync::Mutex;
+use tp::{local::args::Args, log_level, ecommerce::{sysctl::listener::listen_commands, network::listen::Listener, purchases::store::Store}};
 
 #[actix_rt::main]
 async fn main() -> anyhow::Result<()>{
@@ -26,8 +27,11 @@ async fn main() -> anyhow::Result<()>{
 }
 
 async fn start(ip : Ipv4Addr, port: u16) -> anyhow::Result<()>{
-    let listener = Listener::new(ip, port).start();
+    let store = Arc::new(Mutex::new(Store::new()));
+    let listener = Listener::new(ip, port, store.clone()).start();
+    store.as_ref().lock().await.add_to_network(listener.clone());
     listen_commands(
-        listener
+        listener,
+        store
     ).await
 }

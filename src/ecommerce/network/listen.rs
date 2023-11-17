@@ -1,7 +1,7 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, sync::Arc};
 
 use actix::{Actor, Context, Handler, ResponseActFuture, WrapFuture, ActorFutureExt};
-use tokio::{net::TcpListener, select};
+use tokio::{net::TcpListener, select, sync::Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::{info, debug, ecommerce::purchases::store::Store};
@@ -13,18 +13,21 @@ pub struct Listener{
     port: u16,
     ip: Ipv4Addr,
     cancel_token: CancellationToken,
-    store: Store,
+    store: Arc<Mutex<Store>>,
 }
 
 impl Listener{
-    pub fn new(ip: Ipv4Addr, port: u16) -> Self{
+    pub fn new(ip: Ipv4Addr, port: u16, store: Arc<Mutex<Store>>) -> Self{
         Listener { 
             current_state: CurrentState::Waiting,
             cancel_token: CancellationToken::new(),
             port, 
             ip, 
-            store: Store::new(),
+            store,
         }
+    }
+    pub fn store(&mut self) -> Arc<Mutex<Store>> {
+        self.store.clone()
     }
 }
 
@@ -84,7 +87,7 @@ impl Handler<ListenerState> for Listener{
     }
 }
 
-async fn start_listening(to: String, cancel: CancellationToken, store: Store) -> anyhow::Result<()>{
+async fn start_listening(to: String, cancel: CancellationToken, store: Arc<Mutex<Store>>) -> anyhow::Result<()>{
     let listener = TcpListener::bind(&to).await?;
     let mut connected = vec![];
     let mut tasks = vec![];

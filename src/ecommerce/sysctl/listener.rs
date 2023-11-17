@@ -1,11 +1,11 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use actix::Addr;
-use tokio::{io::{BufReader, AsyncBufReadExt}, task::JoinHandle};
+use tokio::{io::{BufReader, AsyncBufReadExt}, task::JoinHandle, sync::Mutex};
 
-use crate::{ecommerce::{sysctl::command::Command, network::{listen::Listener, ListenerState}}, error, info};
+use crate::{ecommerce::{sysctl::command::Command, network::{listen::Listener, ListenerState}, purchases::store::Store}, error, info};
 
-pub async fn listen_commands(net: Addr<Listener>) -> anyhow::Result<()> {
+pub async fn listen_commands(net: Addr<Listener>, store: Arc<Mutex<Store>>) -> anyhow::Result<()> {
     println!("Reading commands from STDIN");
 
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
@@ -16,6 +16,7 @@ pub async fn listen_commands(net: Addr<Listener>) -> anyhow::Result<()> {
     t.push(start_listener(net.clone()));
 
     'main: loop {
+        //let store_clone = store.clone();
         let r = lines.next_line().await;
         if let Ok(Some(line)) = r{
             match Command::from_str(&line){
@@ -47,6 +48,11 @@ pub async fn listen_commands(net: Addr<Listener>) -> anyhow::Result<()> {
                     Command::SellFromFile(f) => {
                         info!(format!("New orders were issued. Info in: {:?}", f));
                         //TODO: read file, read line by line, send to actor that modifies things
+                    },
+                    Command::AddStock(o) => {
+                        store.as_ref().lock().await.add_product_stock(o.get_product(), o.get_qty());
+                        info!(format!("New stock was added: {:?}", o));
+                        info!(format!("Store stock: {:?}", store.as_ref().lock().await.get_products()));
                     },
                 },
                 Err(e) => {
@@ -87,4 +93,5 @@ fn print_commands(){
     println!("\t D | d For bringing down the Network");
     println!("\t O | o <product_id>,<quantity> For giving a new order to the system");
     println!("\t F | f <FilePath> For giving a new set of orders to the system. It will read the orders from the given filepath");
+    println!("\t A | a <product_id>,<quantity> For adding stock to the system");
 }
