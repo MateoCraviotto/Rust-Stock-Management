@@ -1,9 +1,12 @@
 
-use actix::{Actor, Context, Handler, ResponseActFuture, WrapFuture, ActorFutureExt};
-use tokio::{net::TcpStream, io::{BufReader, BufWriter, AsyncBufReadExt}, task::JoinHandle, select};
-use tokio_util::sync::CancellationToken;
+use std::{str::FromStr, sync::Arc};
 
-use crate::{info, debug};
+use actix::{Actor, Context, Handler, ResponseActFuture, WrapFuture, ActorFutureExt};
+use tokio::{net::TcpStream, io::{AsyncWriteExt, AsyncReadExt}, task::JoinHandle, select, sync::Mutex};
+use tokio_util::sync::CancellationToken;
+use purchases::purchase_state::PurchaseState;
+
+use crate::{info, debug, ecommerce::purchases::{self, store::Store}, common::order::Order};
 
 use super::ListenerState;
 
@@ -12,11 +15,12 @@ pub struct Communication{
 }
 
 impl Communication{
-    pub fn new(stream: TcpStream) -> (Self, JoinHandle<anyhow::Result<()>>){
+    pub fn new(stream: TcpStream, store: Store) -> (Self, JoinHandle<anyhow::Result<()>>){
         let mine = CancellationToken::new();
         let pair = mine.clone();
+        let arc_stream = Arc::new(Mutex::new(stream));
 
-        let handle = tokio::spawn(serve(stream, pair));
+        let handle = tokio::spawn(serve(arc_stream, pair, store));
         
         (
             Self { 
@@ -59,23 +63,65 @@ impl Handler<ListenerState> for Communication{
     }
 }
 
-async fn serve(stream: TcpStream, token: CancellationToken) -> anyhow::Result<()> {
-    let (read, mut write) = stream.into_split();
-
-    let mut reader = BufReader::new(read);
-    let mut writer = BufWriter::new(write);
-    let mut data = String::new();
-
+async fn serve(stream: Arc<Mutex<TcpStream>>, token: CancellationToken, store: Store) -> anyhow::Result<()> {
     'serving: loop{
         debug!(format!("Waiting for data or connection or cancellation. {:?}", token));
         select! {
-            r = reader.read_line(&mut data) => {
+            r = read_socket(stream.clone()) => {
+                let data = match r {
+                    Ok(d) => d,
+                    Err(e) => {
+                        info!(format!("Error while reading from socket: {}", e));
+                        break 'serving;
+                    },
+                };
                 debug!("Read some data");
-                if r? == 0{
-                    break 'serving;
-                }
                 println!("RECEIVED: {}", data);
-                data = String::new();
+                match Order::from_str(&data){
+                    Ok(o) => {
+                        let order_state = store.clone().manage_order(o);
+                        match order_state {
+                            PurchaseState::Reserve => {
+                                println!("Stock reserved");
+                                // Reserve stock
+                                println!("Sending reservation ack");
+                                let reservation = format!("{}{}",PurchaseState::Reserve.to_string(),"\n");
+                                write_socket(stream.clone(), &reservation).await?;
+                                
+                            },
+                            _ => {
+                                info!(format!("Store has not enough stock of product {}. Cancelling purchase.", o.get_product()));
+                                let cancellation = PurchaseState::Cancel.to_string();
+                                write_socket(stream.clone(), &cancellation).await?;
+                            },
+
+                        }
+                    },
+                    Err(_) => {} // It is not an order, do nothing
+                };
+                match PurchaseState::from_str(&data) {
+                    Ok(purchase_state) => {
+                        match purchase_state {
+                            PurchaseState::Reserve => {
+                                println!("Stock reserved");
+                                // Reserve stock
+                                println!("Sending reservation ack");
+                                write_socket(stream.clone(), &PurchaseState::Reserve.to_string()).await?;
+                                
+                            },
+                            PurchaseState::Confirm => {
+                                println!("Purchase confirmed from ecommerce. Sending final confirmation.");
+                                write_socket(stream.clone(), &PurchaseState::Confirm.to_string()).await?;
+                            }
+                            _ => {
+                                println!("Purchase was not confirmed. Cancelling purchase.");
+                            },
+
+                        }
+                    },
+                    Err(_) => continue, // Do nothing
+                };
+                //data = String::new();
             }
 
             _ = token.cancelled() => {
@@ -86,4 +132,29 @@ async fn serve(stream: TcpStream, token: CancellationToken) -> anyhow::Result<()
     }
 
     Ok(())
+}
+
+
+pub const BUFSIZE: usize = 512;
+
+/// Function that writes the socket received.
+/// # Arguments
+/// * `arc_socket` - The socket to write to.
+/// * `message` - The message to write.
+pub async fn write_socket(arc_socket: Arc<Mutex<TcpStream>>, message: &str) -> anyhow::Result<()>{
+    let mut msg = message.to_owned().into_bytes();
+    msg.resize(BUFSIZE, 0);
+    arc_socket.as_ref().lock().await.write_all(&msg).await?;
+    Ok(())
+}
+
+/// Function that reads the socket received. It returs
+/// the message read in a String.
+/// # Arguments
+/// * `arc_socket` - The socket to read from.
+pub async fn read_socket(arc_socket: Arc<Mutex<TcpStream>>) -> anyhow::Result<String> {
+    let mut buff = [0u8; BUFSIZE];
+    arc_socket.as_ref().lock().await.read_exact(&mut buff).await?;
+    let msg = buff.into_iter().take_while(|&x| x != 0).collect::<Vec<_>>();
+    Ok(String::from_utf8_lossy(&msg).to_string())
 }

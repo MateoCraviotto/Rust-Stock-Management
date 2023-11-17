@@ -11,7 +11,7 @@ use crate::common::log::Verbosity;
 pub struct Args{
     /// Port of the local to connect to
     #[arg(short,long)]
-    pub port: u16,
+    pub ports: Vec<u16>,
 
     /// Ip of the local to connect to
     #[arg(short, long, default_value_t = Ipv4Addr::from_str("127.0.0.1").unwrap())]
@@ -19,5 +19,9 @@ pub struct Args{
 
     /// Tells the level of verbosity
     #[arg(short, long, default_value_t = Verbosity::Debug)]
-    pub verbosity: Verbosity 
+    pub verbosity: Verbosity,
+
+    /// File to read orders from
+    #[arg(short, long, default_value = "orders.txt")]
+    pub file: String
 }

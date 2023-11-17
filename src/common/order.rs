@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Order{
     product_id:u64,
     qty:u64
@@ -23,6 +23,12 @@ impl Order{
 
     pub fn get_qty(&self)->u64{
         self.qty
+    }
+}
+
+impl ToString for Order{
+    fn to_string(&self) -> String {
+        format!("{},{}", self.product_id, self.qty)
     }
 }
 
