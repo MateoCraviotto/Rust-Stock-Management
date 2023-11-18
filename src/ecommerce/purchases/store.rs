@@ -1,11 +1,43 @@
 use std::collections::HashMap;
 
-use actix::Addr;
+use actix::{Addr, Actor, Context, Handler};
 
 use crate::{ecommerce::network::listen::Listener, error, info, common::order::Order};
 
-use super::purchase_state::PurchaseState;
+use super::{purchase_state::PurchaseState, messages::{StoreMessage, RequestResponse, StoreID, RequestID}};
 
+type Stock = HashMap<u64, u64>;
+
+struct StoreInformation{
+    stock: Stock,
+    transactions: Transaction,
+    is_online: bool
+}
+
+enum TransactionState{
+    Cancelled,
+    AwaitingConfirmation,
+    NodeConfirmed,
+    Finalized
+}
+
+struct Transaction{
+    id: RequestID,
+    state: TransactionState,
+    involved_stock: Stock,
+}
+
+impl StoreInformation{
+    fn random() -> Self{
+        let stock = HashMap::new();
+        
+        Self { stock, is_online: false }
+    }
+
+    fn is_online(&mut self, is_online: bool) {
+        self.is_online = is_online
+    }
+}
 
 pub struct Store {
     //id: String,
@@ -97,5 +129,46 @@ impl Store {
                 None => None,
             }
         }
+    }
+}
+
+
+pub struct StoreActor{
+    stores: HashMap<StoreID, StoreInformation>,
+    self_id: StoreID
+}
+
+impl StoreActor{
+    pub fn new(id: StoreID)->Self{
+        let self_info = Self::create_info();
+
+        let mut stores_info = HashMap::new();
+
+        stores_info.insert(id, self_info);
+
+        Self{
+            stores: stores_info,
+            self_id: id
+        }
+    }
+
+    fn create_info() -> StoreInformation {
+        let mut info = StoreInformation::random();
+
+        info.is_online(true);
+
+        return info;
+    }
+}
+
+impl Actor for StoreActor{
+    type Context = Context<Self>;
+}
+
+impl Handler<StoreMessage> for StoreActor{
+    type Result = Option<RequestResponse>;
+
+    fn handle(&mut self, msg: StoreMessage, ctx: &mut Self::Context) -> Self::Result {
+        todo!()
     }
 }

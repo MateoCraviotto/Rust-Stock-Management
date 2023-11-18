@@ -10,9 +10,9 @@ async fn main() -> anyhow::Result<()>{
     let args = Args::parse();
     log_level!(args.verbosity);
     
-    println!("Starting the Local process in port in address: {}:{}", args.ip, args.port);
+    println!("Starting the Local process in port in address: {}:{}", args.ip, args.extern_port);
 
-    let result = start(args.ip, args.port).await;
+    let result = start(args.ip, args.extern_port).await;
 
     match &result{
         Ok(_) => {

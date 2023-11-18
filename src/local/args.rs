@@ -11,7 +11,17 @@ use crate::common::log::Verbosity;
 pub struct Args{
     /// Port where to start to listen for e-commerce applications
     #[arg(short,long)]
-    pub port: u16,
+    pub extern_port: u16,
+
+
+    /// Port where to start to listen for inter node communications
+    #[arg(short, long)]
+    pub intern_port: u16,
+
+    /// ID of the store node
+    #[arg (short, long)]
+    pub store_id: u64,
+
 
     /// Ip where to bind the e-commerce listener
     #[arg(short, long, default_value_t = Ipv4Addr::from_str("127.0.0.1").unwrap())]
