@@ -1,71 +1,80 @@
-
 use std::{str::FromStr, sync::Arc};
 
-use actix::{Actor, Context, Handler, ResponseActFuture, WrapFuture, ActorFutureExt};
-use tokio::{net::TcpStream, io::{AsyncWriteExt, AsyncReadExt}, task::JoinHandle, select, sync::Mutex};
-use tokio_util::sync::CancellationToken;
+use actix::{Actor, ActorFutureExt, Context, Handler, ResponseActFuture, WrapFuture};
 use purchases::purchase_state::PurchaseState;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    select,
+    sync::Mutex,
+    task::JoinHandle,
+};
+use tokio_util::sync::CancellationToken;
 
-use crate::{info, debug, ecommerce::purchases::{self, store::Store}, common::order::Order};
+use crate::{
+    common::order::Order,
+    debug,
+    ecommerce::purchases::{self, store::Store},
+    info,
+};
 
 use super::ListenerState;
 
-pub struct Communication{
-    cancel_token: CancellationToken
+pub struct Communication {
+    cancel_token: CancellationToken,
 }
 
-impl Communication{
-    pub fn new(stream: TcpStream, store: Arc<Mutex<Store>>) -> (Self, JoinHandle<anyhow::Result<()>>){
+impl Communication {
+    pub fn new(
+        stream: TcpStream,
+        store: Arc<Mutex<Store>>,
+    ) -> (Self, JoinHandle<anyhow::Result<()>>) {
         let mine = CancellationToken::new();
         let pair = mine.clone();
         let arc_stream = Arc::new(Mutex::new(stream));
 
         let handle = tokio::spawn(serve(arc_stream, pair, store));
-        
-        (
-            Self { 
-                cancel_token: mine
-            }, 
-            handle
-        )
+
+        (Self { cancel_token: mine }, handle)
     }
 }
 
-impl Actor for Communication{
+impl Actor for Communication {
     type Context = Context<Self>;
 }
 
-impl Handler<ListenerState> for Communication{
+impl Handler<ListenerState> for Communication {
     type Result = ResponseActFuture<Self, anyhow::Result<()>>;
 
     fn handle(&mut self, msg: ListenerState, _ctx: &mut Self::Context) -> Self::Result {
-        match msg{
+        match msg {
             ListenerState::Down | ListenerState::Shutdown => {
                 self.cancel_token.cancel();
-                debug!(format!("Sending cancellation token for connection, {:?}", self.cancel_token));
-                Box::pin(async {
-                }
-                    .into_actor(self)
-                    .map(move |_result, _me, _ctx|{
-                        return Ok(());
-                    })
-                )
-            },
-            _ => {
-                Box::pin(async {}
-                    .into_actor(self)
-                    .map(move |_result, _me, _ctx|{
-                        return Ok(());
-                    })
-                )
+                debug!(format!(
+                    "Sending cancellation token for connection, {:?}",
+                    self.cancel_token
+                ));
+                Box::pin(async {}.into_actor(self).map(move |_result, _me, _ctx| {
+                    return Ok(());
+                }))
             }
+            _ => Box::pin(async {}.into_actor(self).map(move |_result, _me, _ctx| {
+                return Ok(());
+            })),
         }
     }
 }
 
-async fn serve(stream: Arc<Mutex<TcpStream>>, token: CancellationToken, store: Arc<Mutex<Store>>) -> anyhow::Result<()> {
-    'serving: loop{
-        debug!(format!("Waiting for data or connection or cancellation. {:?}", token));
+async fn serve(
+    stream: Arc<Mutex<TcpStream>>,
+    token: CancellationToken,
+    store: Arc<Mutex<Store>>,
+) -> anyhow::Result<()> {
+    'serving: loop {
+        debug!(format!(
+            "Waiting for data or connection or cancellation. {:?}",
+            token
+        ));
         let store_clone = store.clone();
         select! {
             r = read_socket(stream.clone()) => {
@@ -88,7 +97,7 @@ async fn serve(stream: Arc<Mutex<TcpStream>>, token: CancellationToken, store: A
                                 println!("Sending reservation ack");
                                 let reservation = format!("{}{}",PurchaseState::Reserve.to_string(),"\n");
                                 write_socket(stream.clone(), &reservation).await?;
-                                
+
                             },
                             _ => {
                                 info!(format!("Store has not enough stock of product {}. Cancelling purchase.", o.get_product()));
@@ -108,7 +117,7 @@ async fn serve(stream: Arc<Mutex<TcpStream>>, token: CancellationToken, store: A
                                 // Reserve stock
                                 println!("Sending reservation ack");
                                 write_socket(stream.clone(), &PurchaseState::Reserve.to_string()).await?;
-                                
+
                             },
                             PurchaseState::Confirm => {
                                 println!("Purchase confirmed from ecommerce. Sending final confirmation.");
@@ -135,14 +144,13 @@ async fn serve(stream: Arc<Mutex<TcpStream>>, token: CancellationToken, store: A
     Ok(())
 }
 
-
 pub const BUFSIZE: usize = 512;
 
 /// Function that writes the socket received.
 /// # Arguments
 /// * `arc_socket` - The socket to write to.
 /// * `message` - The message to write.
-pub async fn write_socket(arc_socket: Arc<Mutex<TcpStream>>, message: &str) -> anyhow::Result<()>{
+pub async fn write_socket(arc_socket: Arc<Mutex<TcpStream>>, message: &str) -> anyhow::Result<()> {
     let mut msg = message.to_owned().into_bytes();
     msg.resize(BUFSIZE, 0);
     arc_socket.as_ref().lock().await.write_all(&msg).await?;
@@ -155,7 +163,12 @@ pub async fn write_socket(arc_socket: Arc<Mutex<TcpStream>>, message: &str) -> a
 /// * `arc_socket` - The socket to read from.
 pub async fn read_socket(arc_socket: Arc<Mutex<TcpStream>>) -> anyhow::Result<String> {
     let mut buff = [0u8; BUFSIZE];
-    arc_socket.as_ref().lock().await.read_exact(&mut buff).await?;
+    arc_socket
+        .as_ref()
+        .lock()
+        .await
+        .read_exact(&mut buff)
+        .await?;
     let msg = buff.into_iter().take_while(|&x| x != 0).collect::<Vec<_>>();
     Ok(String::from_utf8_lossy(&msg).to_string())
 }

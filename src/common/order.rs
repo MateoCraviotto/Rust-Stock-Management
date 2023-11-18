@@ -1,61 +1,69 @@
 use std::str::FromStr;
 
 use anyhow::anyhow;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
-pub struct Order{
-    product_id:u64,
-    qty:u64
+pub struct Order {
+    product_id: u64,
+    qty: u64,
 }
 
-impl Order{
+impl Order {
     pub fn new<T>(product: T, qty: T) -> Self
     where
-        T: Into<u64>
+        T: Into<u64>,
     {
-        Self { product_id: product.into(), qty: qty.into() }
+        Self {
+            product_id: product.into(),
+            qty: qty.into(),
+        }
     }
 
-    pub fn get_product(&self)->u64{
+    pub fn get_product(&self) -> u64 {
         self.product_id
     }
 
-    pub fn get_qty(&self)->u64{
+    pub fn get_qty(&self) -> u64 {
         self.qty
     }
 }
 
-impl ToString for Order{
+impl ToString for Order {
     fn to_string(&self) -> String {
         format!("{},{}", self.product_id, self.qty)
     }
 }
 
-impl FromStr for Order{
+impl FromStr for Order {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let splitted: Vec<&str> = s.trim().split(",").collect();
-        let product_id = splitted.get(0)
-            .ok_or(anyhow!("An order must be an ID and a QTY in the format <id: u64>,<qty: u64>"))?
+        let product_id = splitted
+            .get(0)
+            .ok_or(anyhow!(
+                "An order must be an ID and a QTY in the format <id: u64>,<qty: u64>"
+            ))?
             .trim()
             .parse()?;
-        let qty = splitted.get(1)
-            .ok_or(anyhow!("An order must be an ID and a QTY in the format <id: u64>,<qty: u64>"))?
+        let qty = splitted
+            .get(1)
+            .ok_or(anyhow!(
+                "An order must be an ID and a QTY in the format <id: u64>,<qty: u64>"
+            ))?
             .trim()
             .parse()?;
 
-        Ok(Order{product_id, qty})
+        Ok(Order { product_id, qty })
     }
 }
 
 #[cfg(test)]
-mod test{
+mod test {
     use std::str::FromStr;
 
     use super::Order;
-
 
     #[test]
     fn order_from_correct_str() {
@@ -74,7 +82,7 @@ mod test{
     }
 
     #[test]
-    fn order_negative_error(){
+    fn order_negative_error() {
         let order1 = Order::from_str("-2,1");
         let order2 = Order::from_str("-2,-1");
         let order3 = Order::from_str("2,-1");
@@ -85,7 +93,7 @@ mod test{
     }
 
     #[test]
-    fn order_not_number(){
+    fn order_not_number() {
         let order1 = Order::from_str("as,cuatro");
 
         assert!(order1.is_err());

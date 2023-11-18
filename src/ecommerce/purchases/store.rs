@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use actix::{Addr, Actor, Context, Handler};
 use rand::Rng;
 
-use crate::{ecommerce::network::listen::Listener, error, info, common::order::Order};
+use crate::{common::order::Order, ecommerce::network::listen::Listener, error, info};
 
 use super::{purchase_state::PurchaseState, messages::{StoreMessage, StoreID, RequestID, MessageType}};
 
@@ -22,7 +22,7 @@ enum TransactionState{
     Cancelled,
     AwaitingConfirmation,
     NodeConfirmed,
-    Finalized
+    Finalized,
 }
 
 #[derive(Clone)]
@@ -54,21 +54,21 @@ impl Store {
     pub fn new() -> Self {
         Store {
             products: HashMap::new(),
-            listener: None
+            listener: None,
         }
     }
 
-    pub fn get_products(&self)-> HashMap<u64, u64> {
+    pub fn get_products(&self) -> HashMap<u64, u64> {
         self.products.clone()
     }
 
-    pub fn get_product_quantity(&self, product: u64)-> u64{
-        match self.products.get(&product){
+    pub fn get_product_quantity(&self, product: u64) -> u64 {
+        match self.products.get(&product) {
             Some(qty) => *qty,
             None => {
                 error!(format!("Product {} not found", product));
                 0
-            },
+            }
         }
     }
 
@@ -78,7 +78,7 @@ impl Store {
             None => {
                 error!("The store is disconnected");
                 None
-            },
+            }
         }
     }
 
@@ -100,7 +100,7 @@ impl Store {
         let mut remainder = self.products[&id];
         if remainder >= quantity {
             remainder -= quantity;
-            self.products.insert(id,remainder);
+            self.products.insert(id, remainder);
             info!(format!("Selling {} of product {}", quantity, id));
         } else {
             error!("Not enough products to sell");
@@ -132,28 +132,27 @@ impl Store {
             listener: match self.listener {
                 Some(ref addr) => Some(addr.clone()),
                 None => None,
-            }
+            },
         }
     }
 }
 
-
-pub struct StoreActor{
+pub struct StoreActor {
     stores: HashMap<StoreID, StoreInformation>,
-    self_id: StoreID
+    self_id: StoreID,
 }
 
-impl StoreActor{
-    pub fn new(id: StoreID)->Self{
+impl StoreActor {
+    pub fn new(id: StoreID) -> Self {
         let self_info = Self::create_info();
 
         let mut stores_info = HashMap::new();
 
         stores_info.insert(id, self_info);
 
-        Self{
+        Self {
             stores: stores_info,
-            self_id: id
+            self_id: id,
         }
     }
 
@@ -166,7 +165,7 @@ impl StoreActor{
     }
 }
 
-impl Actor for StoreActor{
+impl Actor for StoreActor {
     type Context = Context<Self>;
 }
 

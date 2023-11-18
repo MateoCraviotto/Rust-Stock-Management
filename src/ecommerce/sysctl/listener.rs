@@ -1,9 +1,20 @@
 use std::{str::FromStr, sync::Arc};
 
 use actix::Addr;
-use tokio::{io::{BufReader, AsyncBufReadExt}, task::JoinHandle, sync::Mutex};
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    sync::Mutex,
+    task::JoinHandle,
+};
 
-use crate::{ecommerce::{sysctl::command::Command, network::{listen::Listener, ListenerState}, purchases::store::Store}, error, info};
+use crate::{
+    ecommerce::{
+        network::{listen::Listener, ListenerState},
+        purchases::store::Store,
+        sysctl::command::Command,
+    },
+    error, info,
+};
 
 pub async fn listen_commands(net: Addr<Listener>, store: Arc<Mutex<Store>>) -> anyhow::Result<()> {
     println!("Reading commands from STDIN");
@@ -18,19 +29,19 @@ pub async fn listen_commands(net: Addr<Listener>, store: Arc<Mutex<Store>>) -> a
     'main: loop {
         //let store_clone = store.clone();
         let r = lines.next_line().await;
-        if let Ok(Some(line)) = r{
-            match Command::from_str(&line){
+        if let Ok(Some(line)) = r {
+            match Command::from_str(&line) {
                 Ok(c) => match c {
                     Command::Shutdown => {
                         info!("Shutdown order was given");
                         net.do_send(ListenerState::Shutdown);
                         break 'main;
-                    },
+                    }
                     Command::NetUp => {
                         info!("Network Up order was given");
                         t.push(start_listener(net.clone()));
                         println!("Network was connected");
-                    },
+                    }
                     Command::NetDown => {
                         info!("Network Down order was given");
                         let _ = net.do_send(ListenerState::Down);
@@ -39,26 +50,33 @@ pub async fn listen_commands(net: Addr<Listener>, store: Arc<Mutex<Store>>) -> a
                         let _ = futures::future::join_all(t).await;
                         t = vec![];
                         println!("Network was disconnected");
-                    },
+                    }
                     Command::Sell(o) => {
                         info!(format!("New order was issued: {:?}", o));
                         //TODO: get the address of the actor that modifies things
                         //TODO: See how it modifies
-                    },
+                    }
                     Command::SellFromFile(f) => {
                         info!(format!("New orders were issued. Info in: {:?}", f));
                         //TODO: read file, read line by line, send to actor that modifies things
-                    },
+                    }
                     Command::AddStock(o) => {
-                        store.as_ref().lock().await.add_product_stock(o.get_product(), o.get_qty());
+                        store
+                            .as_ref()
+                            .lock()
+                            .await
+                            .add_product_stock(o.get_product(), o.get_qty());
                         info!(format!("New stock was added: {:?}", o));
-                        info!(format!("Store stock: {:?}", store.as_ref().lock().await.get_products()));
-                    },
+                        info!(format!(
+                            "Store stock: {:?}",
+                            store.as_ref().lock().await.get_products()
+                        ));
+                    }
                 },
                 Err(e) => {
                     error!(format!("The given command was not able to parse: {:?} ", e));
                     print_commands();
-                },
+                }
             }
         }
     }
@@ -68,25 +86,26 @@ pub async fn listen_commands(net: Addr<Listener>, store: Arc<Mutex<Store>>) -> a
 }
 
 /// Awaits a message of start in order to handle the error in case they happen
-fn start_listener(net: Addr<Listener>) -> JoinHandle<()>{
-    tokio::spawn(async move{
+fn start_listener(net: Addr<Listener>) -> JoinHandle<()> {
+    tokio::spawn(async move {
         match net.send(ListenerState::Start).await {
-            Ok(v) => {
-                match v{
-                    Ok(_) => {},
-                    Err(e) => {
-                        error!(format!("There was an error in the TCP connection: {:?}", e))
-                    },
+            Ok(v) => match v {
+                Ok(_) => {}
+                Err(e) => {
+                    error!(format!("There was an error in the TCP connection: {:?}", e))
                 }
             },
             Err(e) => {
-                error!(format!("There was an error while delivering the message to the listener Actor: {}", e))
-            },
+                error!(format!(
+                    "There was an error while delivering the message to the listener Actor: {}",
+                    e
+                ))
+            }
         }
     })
 }
 
-fn print_commands(){
+fn print_commands() {
     println!("The valid commands are:");
     println!("\t S | s For shutting down the whole application");
     println!("\t U | u To get the Network Up");

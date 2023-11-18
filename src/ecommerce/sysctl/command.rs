@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use anyhow::{anyhow, bail, Ok};
 use crate::common::order::Order;
+use anyhow::{anyhow, bail, Ok};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
@@ -10,15 +10,17 @@ pub enum Command {
     NetDown,
     Sell(Order),
     SellFromFile(String),
-    AddStock(Order)
+    AddStock(Order),
 }
 
-impl FromStr for Command{
+impl FromStr for Command {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let clean = s.trim_start();
-        let first = clean.as_bytes().get(0).ok_or(anyhow!("The command must be at least 1 ASCII character long with"))?;
+        let first = clean.as_bytes().get(0).ok_or(anyhow!(
+            "The command must be at least 1 ASCII character long with"
+        ))?;
         let second = clean.as_bytes().get(1).unwrap_or(&b' ');
         match (first,second){
             (b'S' | b's', b' ')=> Ok(Command::Shutdown),
@@ -34,12 +36,14 @@ impl FromStr for Command{
 
 fn parse_file(s: &str) -> anyhow::Result<String> {
     let trimmed = s.trim();
-    if trimmed.is_empty() { bail!("A path is needed when reading orders from a file")}
+    if trimmed.is_empty() {
+        bail!("A path is needed when reading orders from a file")
+    }
     Ok(String::try_from(trimmed)?)
 }
 
 #[cfg(test)]
-mod test{
+mod test {
     use std::str::FromStr;
 
     use crate::{common::order::Order, ecommerce::sysctl::command::Command};
@@ -83,9 +87,12 @@ mod test{
         let shutdown = Command::from_str("   s").expect("Command was not properly parsed");
         let netup = Command::from_str("  u").expect("Command was not properly parsed");
         let netdown = Command::from_str("   d").expect("Command was not properly parsed");
-        let order = Command::from_str("   o    1   ,   1").expect("Command was not properly parsed");
-        let from_file = Command::from_str("   f     Something").expect("Command was not properly parsed");
-        let add_stock = Command::from_str("   a    1   ,   1").expect("Command was not properly parsed");
+        let order =
+            Command::from_str("   o    1   ,   1").expect("Command was not properly parsed");
+        let from_file =
+            Command::from_str("   f     Something").expect("Command was not properly parsed");
+        let add_stock =
+            Command::from_str("   a    1   ,   1").expect("Command was not properly parsed");
 
         assert_eq!(Command::Shutdown, shutdown);
         assert_eq!(Command::NetUp, netup);

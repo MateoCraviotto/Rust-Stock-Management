@@ -1,17 +1,17 @@
 use actix::Message;
 
-pub mod listen;
 pub mod connection;
+pub mod listen;
 
 #[derive(Message)]
 #[rtype(result = "anyhow::Result<()>")]
 pub enum ListenerState {
     Start,
     Down,
-    Shutdown
+    Shutdown,
 }
 
 enum CurrentState {
     Listening,
-    Waiting
+    Waiting,
 }

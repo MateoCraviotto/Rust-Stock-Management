@@ -3,7 +3,6 @@ use std::str::FromStr;
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 struct PurchaseNumber(u32);
 
-
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PurchaseState {
     Reserve,
@@ -11,7 +10,7 @@ pub enum PurchaseState {
     Cancel,
 }
 
-impl ToString for PurchaseState{
+impl ToString for PurchaseState {
     fn to_string(&self) -> String {
         match self {
             PurchaseState::Reserve => "Reserve".to_string(),
@@ -21,7 +20,7 @@ impl ToString for PurchaseState{
     }
 }
 
-impl FromStr for PurchaseState{
+impl FromStr for PurchaseState {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -29,7 +28,9 @@ impl FromStr for PurchaseState{
             "Reserve" => Ok(PurchaseState::Reserve),
             "Confirm" => Ok(PurchaseState::Confirm),
             "Cancel" => Ok(PurchaseState::Cancel),
-            _ => Err(anyhow::anyhow!("The given string is not a valid PurchaseState")),
+            _ => Err(anyhow::anyhow!(
+                "The given string is not a valid PurchaseState"
+            )),
         }
     }
 }
