@@ -13,6 +13,8 @@ pub enum MessageType {
     Confirm(RequestID),
     Commit(RequestID),
     Cancel(RequestID),
+    LocalRequest,
+    AddStock,
 }
 
 pub enum RequestResponse {

@@ -1,6 +1,6 @@
 use actix::{
-    dev::{MessageResponse, ToEnvelope},
-    Actor, Addr, Handler, Message, ResponseActFuture,
+    dev::ToEnvelope,
+    Actor, Addr, Message, ResponseActFuture,
 };
 use anyhow::bail;
 use core::fmt::Debug;

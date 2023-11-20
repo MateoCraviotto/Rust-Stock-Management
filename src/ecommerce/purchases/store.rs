@@ -372,8 +372,140 @@ impl Handler<StoreMessage> for StoreActor {
                 self.stores.insert(self.self_id, self_info.clone());
                 Some(transaction)
             }
-            _ => {
-                todo!()
+            StoreMessage {
+                message_type: MessageType::LocalRequest,
+                new_stock: _,
+                transactions: _,
+                orders,
+            } => {
+                let stores_clone = self.stores.clone();
+                let self_info = stores_clone.get(&self.self_id).cloned();
+                let mut self_info = match self_info {
+                    Some(self_info) => self_info,
+                    None => {
+                        return None;
+                    }
+                };
+                let orders = match orders {
+                    Some(orders) => orders,
+                    None => {
+                        return None;
+                    }
+                };
+                // Check which orders I can complete (local_orders)
+                // If I cannot complete one order, abort the operation (None)
+                let mut local_stock: Stock = Stock::new();
+                for order in orders {
+                    let product = order.get_product();
+                    let qty = order.get_qty();
+
+                    if self_info.stock.contains_key(&product) {
+                        let current_qty = self_info.stock[&product];
+                        if current_qty >= qty {
+                            // Update local stock
+                            local_stock.insert(product, qty); // Reserve local stock
+                        } else {
+                            println!("Not enough stock of product {}", product);
+                            return None;
+                        }
+                    } else {
+                        println!("Not enough stock of product {}", product);
+                        return None;
+                    }
+                }
+                // Update local stock
+                for (product, qty) in local_stock.clone() {
+                    let current_qty = self_info.stock[&product];
+                    self_info.stock.insert(product, current_qty - qty);
+                }
+                self.stores.insert(self.self_id, self_info);
+                let mut involved_stock: HashMap<u64, Stock> = HashMap::new();
+                involved_stock.insert(self.self_id, local_stock);
+
+                return Some(Transaction {
+                    id: 0,
+                    state: TransactionState::Finalized,
+                    involved_stock: involved_stock,
+                });
+            }
+            StoreMessage {
+                message_type: MessageType::AddStock,
+                new_stock,
+                transactions: _,
+                orders: _,
+            } => {
+                let stores_clone = self.stores.clone();
+                let self_info = stores_clone.get(&self.self_id).cloned();
+                let mut self_info = match self_info {
+                    Some(self_info) => self_info,
+                    None => {
+                        return None;
+                    }
+                };
+                let new_stock = match new_stock {
+                    Some(new_stock) => new_stock,
+                    None => {
+                        return None;
+                    }
+                };
+                for (product, qty) in new_stock {
+                    if self_info.stock.contains_key(&product) {
+                        let current_qty = self_info.stock[&product];
+                        self_info.stock.insert(product, current_qty + qty);
+                    } else {
+                        self_info.stock.insert(product, qty);
+                    }
+                }
+                self.stores.insert(self.self_id, self_info);
+                None
+            }
+            StoreMessage {
+                message_type: MessageType::Ask(request_id),
+                new_stock,
+                transactions: _,
+                orders: _,
+            } => {
+                let stores_clone = self.stores.clone();
+                let self_info = stores_clone.get(&self.self_id).cloned();
+                let mut self_info = match self_info {
+                    Some(self_info) => self_info,
+                    None => {
+                        return None;
+                    }
+                };
+                let new_stock = match new_stock {
+                    Some(new_stock) => new_stock,
+                    None => {
+                        return None;
+                    }
+                };
+                // Check if I have every single product
+                for (product, qty) in new_stock.clone() {
+                    if self_info.stock.contains_key(&product) {
+                        let current_qty = self_info.stock[&product];
+                        if current_qty < qty {
+                            return None;
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                // Update my stock
+                for (product, qty) in new_stock {
+                    let current_qty = self_info.stock[&product];
+                    self_info.stock.insert(product, current_qty - qty);
+                }
+                self.stores.insert(self.self_id, self_info);
+
+                let transaction = Transaction {
+                    id: request_id,
+                    state: TransactionState::AwaitingConfirmation,
+                    involved_stock: HashMap::new(),
+                };
+                if let Some(me) = self.stores.get_mut(&self.self_id) {
+                    me.transactions.insert(request_id, transaction.clone());
+                }
+                Some(transaction)
             }
         }
     }

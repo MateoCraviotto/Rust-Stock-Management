@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncBufReadExt;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Order {
@@ -57,6 +58,17 @@ impl FromStr for Order {
 
         Ok(Order { product_id, qty })
     }
+}
+
+pub async fn read_orders(filename: String) -> anyhow::Result<Vec<Order>> {
+    let mut orders = vec![];
+    let file = tokio::fs::File::open(filename).await?;
+    let mut lines = tokio::io::BufReader::new(file).lines();
+    while let Some(line) = lines.next_line().await? {
+        orders.push(Order::from_str(&line)?);
+    }
+
+    Ok(orders)
 }
 
 #[cfg(test)]

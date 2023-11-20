@@ -7,9 +7,13 @@ use tokio::{
 };
 
 use crate::{
+    common::order::read_orders,
     ecommerce::{
         network::{listen::Listener, ListenerState},
-        purchases::store::{Stock, StoreActor},
+        purchases::{
+            messages::{MessageType, StoreMessage},
+            store::{Stock, StoreActor},
+        },
         sysctl::command::Command,
     },
     error, info,
@@ -72,14 +76,34 @@ pub async fn listen_commands(
                     }
                     Command::Sell(o) => {
                         info!(format!("New order was issued: {:?}", o));
-                        //TODO: get the address of the actor that modifies things
-                        //TODO: See how it modifies
+                        let _ = store.do_send(StoreMessage {
+                            message_type: MessageType::LocalRequest,
+                            new_stock: None,
+                            transactions: None,
+                            orders: Some(vec![o]),
+                        });
                     }
                     Command::SellFromFile(f) => {
                         info!(format!("New orders were issued. Info in: {:?}", f));
-                        //TODO: read file, read line by line, send to actor that modifies things
+                        let orders = read_orders(f).await?;
+                        let _ = store.do_send(StoreMessage {
+                            message_type: MessageType::LocalRequest,
+                            new_stock: None,
+                            transactions: None,
+                            orders: Some(orders),
+                        });
                     }
-                    Command::AddStock(o) => {}
+                    Command::AddStock(o) => {
+                        info!(format!("Adding new stock: {:?}", o));
+                        let mut stock_to_add = Stock::new();
+                        stock_to_add.insert(o.get_product(), o.get_qty());
+                        let _ = store.do_send(StoreMessage {
+                            message_type: MessageType::LocalRequest,
+                            new_stock: Some(stock_to_add),
+                            transactions: None,
+                            orders: None,
+                        });
+                    }
                 },
                 Err(e) => {
                     error!(format!("The given command was not able to parse: {:?} ", e));

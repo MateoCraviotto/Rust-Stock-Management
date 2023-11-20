@@ -324,7 +324,7 @@ impl PeerComunication {
                                                 message_type: MessageType::Error,
                                                 body: format!("{:?}", e)
                                             }),
-                                            Err(e) => Self::send_back(&tx, from_id, InterNodeMessage {
+                                            Err(_) => Self::send_back(&tx, from_id, InterNodeMessage {
                                                 from: me,
                                                 correlation_id: None,
                                                 message_type: MessageType::Error,

@@ -64,7 +64,6 @@ impl StoreGlue {
 
     fn transform_request(
         me: StoreID,
-        from: NodeID,
         message: ProtocolStoreMessage,
     ) -> Option<(RequestID, StoreMessage)> {
         let (id, state, information) = message
@@ -139,7 +138,7 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                         Ok(ProtocolEvent::MaybeNew)
                     }
                     ProtocolMessageType::Request => {
-                        if let Some((req_id, m)) = Self::transform_request(me, msg.from, msg) {
+                        if let Some((req_id, m)) = Self::transform_request(me, msg) {
                             return match store.send(m).await {
                                 Ok(Some(_)) => Ok(ProtocolEvent::Response(ProtocolStoreMessage {
                                     from: me,
