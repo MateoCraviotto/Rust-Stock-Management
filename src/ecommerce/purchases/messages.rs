@@ -11,7 +11,7 @@ pub enum MessageType {
     Request,
     Commit(RequestID),
     Cancel(RequestID),
-    //Ask(RequestID),
+    Ask(RequestID),
     LocalRequest,
     AddStock,
 }

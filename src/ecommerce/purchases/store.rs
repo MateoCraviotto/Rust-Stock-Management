@@ -459,6 +459,54 @@ impl Handler<StoreMessage> for StoreActor {
                 self.stores.insert(self.self_id, self_info);
                 None
             }
+            StoreMessage {
+                message_type: MessageType::Ask(request_id),
+                new_stock,
+                transactions: _,
+                orders: _,
+            } => {
+                let stores_clone = self.stores.clone();
+                let self_info = stores_clone.get(&self.self_id).cloned();
+                let mut self_info = match self_info {
+                    Some(self_info) => self_info,
+                    None => {
+                        return None;
+                    }
+                };
+                let new_stock = match new_stock {
+                    Some(new_stock) => new_stock,
+                    None => {
+                        return None;
+                    }
+                };
+                // Check if I have every single product
+                for (product, qty) in new_stock.clone() {
+                    if self_info.stock.contains_key(&product) {
+                        let current_qty = self_info.stock[&product];
+                        if current_qty < qty {
+                            return None;
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                // Update my stock
+                for (product, qty) in new_stock {
+                    let current_qty = self_info.stock[&product];
+                    self_info.stock.insert(product, current_qty - qty);
+                }
+                self.stores.insert(self.self_id, self_info);
+
+                let transaction = Transaction {
+                    id: request_id,
+                    state: TransactionState::AwaitingConfirmation,
+                    involved_stock: HashMap::new(),
+                };
+                if let Some(me) = self.stores.get_mut(&self.self_id) {
+                    me.transactions.insert(request_id, transaction.clone());
+                }
+                Some(transaction)
+            }
         }
     }
 }
