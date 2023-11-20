@@ -1,39 +1,51 @@
+use crate::local::node_comm::ProtocolEvent;
+use crate::local::protocol::store_glue::ProtocolStoreMessage;
 use crate::local::{NodeID, RequestID};
+use actix::Message;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum MessageType {
+#[derive(Serialize, Deserialize, Debug, Message)]
+#[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
+pub enum ProtocolMessageType {
     Goodbye,
     Update,
     Request,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum RequestState {
+#[derive(Serialize, Deserialize, Debug, Message)]
+#[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
+
+pub enum RequestAction {
     Ask,
-    ResponseOK,
-    ResponseNOK,
+    Confirm,
     Commit,
     Cancel,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Message)]
+#[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
+
 pub struct ProtocolMessage<M, S> {
-    message_type: MessageType,
-    request_information: Option<Request<M>>,
-    update_information: Option<Vec<S>>,
+    pub from: NodeID,
+    pub message_type: ProtocolMessageType,
+    pub request_information: Option<Request<M>>,
+    pub update_information: Option<S>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Message)]
+#[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
+
 pub struct Request<M> {
-    request_id: RequestID,
-    requester: NodeID,
-    request_state: RequestState,
-    information: Option<NodeModification<M>>,
+    pub request_id: RequestID,
+    pub requester: NodeID,
+    pub request_state: RequestAction,
+    pub information: Option<Vec<NodeModification<M>>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Message)]
+#[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
+
 pub struct NodeModification<M> {
-    affected: NodeID,
-    modifications: Vec<M>,
+    pub affected: NodeID,
+    pub modifications: Vec<M>,
 }

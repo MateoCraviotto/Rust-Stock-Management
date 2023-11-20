@@ -1,3 +1,7 @@
+use actix::{
+    dev::{MessageResponse, ToEnvelope},
+    Actor, Addr, Handler, Message, ResponseActFuture,
+};
 use anyhow::bail;
 use core::fmt::Debug;
 use serde::{de::DeserializeOwned, Serialize};
@@ -13,31 +17,48 @@ use crate::{debug, info};
 
 use super::{
     node_communication::{NodeCommunication, PeerComunication},
-    NodeID, Operator,
+    NodeID, ProtocolEvent,
 };
 
 pub struct NodeListener<
-    T: Debug + Send + Serialize + DeserializeOwned + 'static,
-    O: Operator<T> + 'static,
+    T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
+        + Debug
+        + Send
+        + Serialize
+        + DeserializeOwned
+        + 'static,
+    A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
 > {
     me: NodeID,
     port: u16,
     ip: Ipv4Addr,
     initial_list: Vec<u16>,
-    operator: Arc<O>,
+    operator: Addr<A>,
 
     cancel: Option<CancellationToken>,
-    node_comm: Option<Arc<NodeCommunication<T, O>>>,
+    node_comm: Option<Arc<NodeCommunication<T, A>>>,
     task_handle: Option<JoinHandle<anyhow::Result<()>>>,
 }
 
-impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>> NodeListener<T, O> {
+impl<
+        T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
+            + Debug
+            + Send
+            + Serialize
+            + DeserializeOwned
+            + 'static,
+        A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
+    > NodeListener<T, A>
+where
+    <A as Actor>::Context: ToEnvelope<A, T>,
+    <T as actix::Message>::Result: std::marker::Send,
+{
     pub fn start(
         port: u16,
         ip: Ipv4Addr,
         me: NodeID,
         initial_list: Vec<u16>,
-        operator: Arc<O>,
+        operator: Addr<A>,
     ) -> Self {
         let cancel = CancellationToken::new();
         let child_token = cancel.child_token();
@@ -81,7 +102,7 @@ impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>> N
         ip: Ipv4Addr,
         cancel: CancellationToken,
         initial_list: Vec<u16>,
-        node_comm: Arc<NodeCommunication<T, O>>,
+        node_comm: Arc<NodeCommunication<T, A>>,
     ) -> anyhow::Result<()> {
         let mut node_comms = Self::connect_initial(
             initial_list.into_iter().map(|port| (ip, port)).collect(),
@@ -113,9 +134,9 @@ impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>> N
         Ok(())
     }
 
-    async fn connect_initial<A: Debug + ToSocketAddrs>(
-        initial_list: Vec<A>,
-        node_comm: Arc<NodeCommunication<T, O>>,
+    async fn connect_initial<D: Debug + ToSocketAddrs>(
+        initial_list: Vec<D>,
+        node_comm: Arc<NodeCommunication<T, A>>,
     ) -> Vec<PeerComunication> {
         let tasks = initial_list
             .into_iter()
@@ -128,9 +149,9 @@ impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>> N
             .collect()
     }
 
-    async fn connect_initial_single<A: Debug + ToSocketAddrs>(
-        to: A,
-        node_comm: Arc<NodeCommunication<T, O>>,
+    async fn connect_initial_single<D: Debug + ToSocketAddrs>(
+        to: D,
+        node_comm: Arc<NodeCommunication<T, A>>,
     ) -> anyhow::Result<PeerComunication> {
         let stream = TcpStream::connect(&to).await?;
         info!(format!("Initial connect to node in {:?}", &to));

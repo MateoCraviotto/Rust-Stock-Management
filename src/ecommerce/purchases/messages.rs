@@ -4,11 +4,13 @@ use std::collections::HashMap;
 
 use super::store::{Stock, Transaction};
 
-pub type RequestID = u64;
+pub type RequestID = u128;
 pub type StoreID = u64;
 pub enum MessageType {
     Update(StoreID),
     Request,
+    Ask(RequestID),
+    Confirm(RequestID),
     Commit(RequestID),
     Cancel(RequestID),
 }

@@ -30,7 +30,7 @@ enum TransactionState {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
-    id: RequestID,
+    pub id: RequestID,
     state: TransactionState,
     involved_stock: HashMap<StoreID, Stock>,
 }
@@ -217,7 +217,7 @@ impl Handler<StoreMessage> for StoreActor {
                 transactions: _,
                 orders,
             } => {
-                let new_transaction_id = self.stores[&self.self_id].transactions.len() as u64;
+                let new_transaction_id = self.stores[&self.self_id].transactions.len() as u128;
                 let stores_clone = self.stores.clone();
                 let self_info = stores_clone.get(&self.self_id).cloned();
                 match self_info {
@@ -371,6 +371,9 @@ impl Handler<StoreMessage> for StoreActor {
                 // Add changes in the cloned transaction to the store
                 self.stores.insert(self.self_id, self_info.clone());
                 Some(transaction)
+            }
+            _ => {
+                todo!()
             }
         }
     }

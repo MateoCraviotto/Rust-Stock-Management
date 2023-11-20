@@ -1,7 +1,6 @@
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 
-use actix::{Actor, ActorFutureExt, Context, Handler, ResponseActFuture, WrapFuture};
-use purchases::purchase_state::PurchaseState;
+use actix::{Actor, ActorFutureExt, Addr, Context, Handler, ResponseActFuture, WrapFuture};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -11,12 +10,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    common::order::Order,
-    debug,
-    ecommerce::purchases::{self, store::Store},
-    info,
-};
+use crate::{debug, ecommerce::purchases::store::StoreActor, info};
 
 use super::ListenerState;
 
@@ -27,7 +21,7 @@ pub struct Communication {
 impl Communication {
     pub fn new(
         stream: TcpStream,
-        store: Arc<Mutex<Store>>,
+        store: Addr<StoreActor>,
     ) -> (Self, JoinHandle<anyhow::Result<()>>) {
         let mine = CancellationToken::new();
         let pair = mine.clone();
@@ -68,17 +62,16 @@ impl Handler<ListenerState> for Communication {
 async fn serve(
     stream: Arc<Mutex<TcpStream>>,
     token: CancellationToken,
-    store: Arc<Mutex<Store>>,
+    store: Addr<StoreActor>,
 ) -> anyhow::Result<()> {
     'serving: loop {
         debug!(format!(
             "Waiting for data or connection or cancellation. {:?}",
             token
         ));
-        let store_clone = store.clone();
         select! {
             r = read_socket(stream.clone()) => {
-                let data = match r {
+                let mut data = match r {
                     Ok(d) => d,
                     Err(e) => {
                         info!(format!("Error while reading from socket: {}", e));
@@ -87,51 +80,51 @@ async fn serve(
                 };
                 debug!("Read some data");
                 println!("RECEIVED: {}", data);
-                match Order::from_str(&data){
-                    Ok(o) => {
-                        let order_state = store_clone.as_ref().lock().await.manage_order(o);
-                        match order_state {
-                            PurchaseState::Reserve => {
-                                println!("Stock reserved");
-                                // Reserve stock
-                                println!("Sending reservation ack");
-                                let reservation = format!("{}{}",PurchaseState::Reserve.to_string(),"\n");
-                                write_socket(stream.clone(), &reservation).await?;
+                // match Order::from_str(&data){
+                //     Ok(o) => {
+                //         let order_state = store_clone.as_ref().lock().await.manage_order(o);
+                //         match order_state {
+                //             PurchaseState::Reserve => {
+                //                 println!("Stock reserved");
+                //                 // Reserve stock
+                //                 println!("Sending reservation ack");
+                //                 let reservation = format!("{}{}",PurchaseState::Reserve.to_string(),"\n");
+                //                 write_socket(stream.clone(), &reservation).await?;
 
-                            },
-                            _ => {
-                                info!(format!("Store has not enough stock of product {}. Cancelling purchase.", o.get_product()));
-                                let cancellation = PurchaseState::Cancel.to_string();
-                                write_socket(stream.clone(), &cancellation).await?;
-                            },
+                //             },
+                //             _ => {
+                //                 info!(format!("Store has not enough stock of product {}. Cancelling purchase.", o.get_product()));
+                //                 let cancellation = PurchaseState::Cancel.to_string();
+                //                 write_socket(stream.clone(), &cancellation).await?;
+                //             },
 
-                        }
-                    },
-                    Err(_) => {} // It is not an order, do nothing
-                };
-                match PurchaseState::from_str(&data) {
-                    Ok(purchase_state) => {
-                        match purchase_state {
-                            PurchaseState::Reserve => {
-                                println!("Stock reserved");
-                                // Reserve stock
-                                println!("Sending reservation ack");
-                                write_socket(stream.clone(), &PurchaseState::Reserve.to_string()).await?;
+                //         }
+                //     },
+                //     Err(_) => {} // It is not an order, do nothing
+                // };
+                // match PurchaseState::from_str(&data) {
+                //     Ok(purchase_state) => {
+                //         match purchase_state {
+                //             PurchaseState::Reserve => {
+                //                 println!("Stock reserved");
+                //                 // Reserve stock
+                //                 println!("Sending reservation ack");
+                //                 write_socket(stream.clone(), &PurchaseState::Reserve.to_string()).await?;
 
-                            },
-                            PurchaseState::Confirm => {
-                                println!("Purchase confirmed from ecommerce. Sending final confirmation.");
-                                write_socket(stream.clone(), &PurchaseState::Confirm.to_string()).await?;
-                            }
-                            _ => {
-                                println!("Purchase was not confirmed. Cancelling purchase.");
-                            },
+                //             },
+                //             PurchaseState::Confirm => {
+                //                 println!("Purchase confirmed from ecommerce. Sending final confirmation.");
+                //                 write_socket(stream.clone(), &PurchaseState::Confirm.to_string()).await?;
+                //             }
+                //             _ => {
+                //                 println!("Purchase was not confirmed. Cancelling purchase.");
+                //             },
 
-                        }
-                    },
-                    Err(_) => continue, // Do nothing
-                };
-                //data = String::new();
+                //         }
+                //     },
+                //     Err(_) => continue, // Do nothing
+                // };
+                data = String::new();
             }
 
             _ = token.cancelled() => {

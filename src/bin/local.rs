@@ -1,17 +1,12 @@
-use std::{net::Ipv4Addr, sync::Arc};
+use std::net::Ipv4Addr;
 
 use actix::Actor;
 use clap::Parser;
-use tokio::sync::Mutex;
 use tp::{
     ecommerce::{
-        network::listen::Listener,
-        purchases::store::{Store, StoreActor},
-        sysctl::listener::listen_commands,
+        network::listen::Listener, purchases::store::StoreActor, sysctl::listener::listen_commands,
     },
-    local::{
-        args::Args, node_comm::node_listener::NodeListener, protocol::store_glue::StoreOperator,
-    },
+    local::{args::Args, node_comm::node_listener::NodeListener, protocol::store_glue::StoreGlue},
     log_level,
 };
 
@@ -57,16 +52,10 @@ async fn start(
     internal_port: u16,
     internal_port_list: Vec<u16>,
 ) -> anyhow::Result<()> {
-    let store = Arc::new(Mutex::new(Store::new()));
+    let store = StoreActor::new(me).start();
     let listener = Listener::new(ip, external_port, store.clone()).start();
-    let store_actor = StoreActor::new(me).start();
-    let internal_listener = NodeListener::start(
-        internal_port,
-        ip,
-        me,
-        internal_port_list,
-        Arc::new(StoreOperator::new(store_actor.clone())),
-    );
-    store.as_ref().lock().await.add_to_network(listener.clone());
-    listen_commands(listener, internal_listener, store_actor).await
+    let store_glue = StoreGlue::new(me, store.clone()).start();
+    let internal_listener =
+        NodeListener::start(internal_port, ip, me, internal_port_list, store_glue);
+    listen_commands(listener, internal_listener, store).await
 }

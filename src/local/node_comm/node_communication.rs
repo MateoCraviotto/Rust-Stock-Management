@@ -1,3 +1,6 @@
+use crate::local::protocol::store_glue::ProtocolStoreMessage;
+use actix::dev::ToEnvelope;
+use actix::{Actor, Addr, Message, ResponseActFuture};
 use anyhow::{anyhow, bail};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt::Debug;
@@ -14,28 +17,37 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::debug;
-use crate::local::node_comm::ProtocolEvent;
 use crate::local::NodeID;
+use crate::{debug, error};
 
-use super::Operator;
+use super::ProtocolEvent;
 
 type CorrelationID = u64;
 
 #[derive(Serialize, Deserialize, Debug)]
+enum MessageType {
+    Request,
+    Response,
+    Error,
+}
+
+#[derive(Serialize, Deserialize, Debug, Message)]
+#[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
 pub struct InterNodeMessage<T> {
     from: NodeID,
     correlation_id: Option<CorrelationID>,
+    message_type: MessageType,
     body: T,
 }
 pub enum PeerMessage {
     PeerUp(NodeID, OwnedWriteHalf),
+    PeerResponse(NodeID, Vec<u8>),
     PeerDown(NodeID),
 }
 
 pub struct NodeCommunication<
-    T: Debug + Send + Serialize + DeserializeOwned + 'static,
-    O: Operator<T> + 'static,
+    T: Message + Debug + Send + Serialize + DeserializeOwned + 'static,
+    A: Actor + actix::Handler<T>,
 > {
     me: NodeID,
     cancel: CancellationToken,
@@ -43,13 +55,23 @@ pub struct NodeCommunication<
     peer_task_tx: Sender<PeerMessage>,
     peers_writer: Mutex<HashMap<NodeID, OwnedWriteHalf>>,
     responses: Arc<Mutex<HashMap<CorrelationID, (Notify, Option<T>)>>>,
-    operator: Arc<O>,
+    actor: Addr<A>,
 }
 
-impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>>
-    NodeCommunication<T, O>
+impl<
+        T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
+            + Debug
+            + Send
+            + Serialize
+            + DeserializeOwned
+            + 'static,
+        A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
+    > NodeCommunication<T, A>
+where
+    <A as Actor>::Context: ToEnvelope<A, T>,
+    <T as actix::Message>::Result: std::marker::Send,
 {
-    pub fn start(cancel: CancellationToken, me: NodeID, operator: Arc<O>) -> Arc<Self> {
+    pub fn start(cancel: CancellationToken, me: NodeID, actor: Addr<A>) -> Arc<Self> {
         let (peer_tx, peer_rx) = mpsc::channel(256);
         let this = Arc::new(Self {
             me,
@@ -58,7 +80,7 @@ impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>>
             peer_task_tx: peer_tx,
             peers_writer: Mutex::new(HashMap::new()),
             responses: Arc::new(Mutex::new(HashMap::new())),
-            operator: operator,
+            actor,
         });
 
         let _ = tokio::spawn(Self::run(this.clone()));
@@ -80,6 +102,9 @@ impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>>
                                 PeerMessage::PeerDown(id) => {
                                     this.peers_writer.lock().await.remove(&id);
                                 },
+                                PeerMessage::PeerResponse(id, serialized) => {
+                                    let _ = this.send_bytes(id, &serialized).await;
+                                }
                             }
                         },
                         None => break,
@@ -98,11 +123,12 @@ impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>>
     pub fn new_node(&self, stream: TcpStream) -> PeerComunication {
         let tx = self.peer_task_tx.clone();
 
-        PeerComunication::new::<T, O>(
+        PeerComunication::new::<T, A>(
+            self.me,
             stream,
             self.cancel.clone(),
             tx,
-            self.operator.clone(),
+            self.actor.clone(),
             self.responses.clone(),
         )
     }
@@ -112,6 +138,7 @@ impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>>
         let with_header = InterNodeMessage {
             from: self.me,
             correlation_id,
+            message_type: MessageType::Request,
             body: msg,
         };
         self.send(node, with_header).await?;
@@ -128,16 +155,20 @@ impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>>
         let with_header = InterNodeMessage {
             from: self.me,
             correlation_id,
+            message_type: MessageType::Request,
             body: msg,
         };
         self.send(node, with_header).await
     }
 
     async fn send(&self, node: NodeID, msg: InterNodeMessage<T>) -> anyhow::Result<()> {
+        self.send_bytes(node, &serde_json::to_vec(&msg)?).await
+    }
+
+    async fn send_bytes(&self, node: NodeID, msg: &[u8]) -> anyhow::Result<()> {
         match self.peers_writer.lock().await.get_mut(&node) {
             Some(writer) => {
-                let to_write = serde_json::to_string(&msg)?;
-                writer.write_all(to_write.as_bytes()).await?;
+                writer.write_all(msg).await?;
                 Ok(())
             }
             None => bail!("NodeID {} is not registered", node),
@@ -193,25 +224,51 @@ pub struct PeerComunication {
 }
 
 impl PeerComunication {
-    pub fn new<T: Send + Serialize + DeserializeOwned + 'static, O: Operator<T> + 'static>(
+    pub fn new<
+        T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
+            + Debug
+            + Send
+            + Serialize
+            + DeserializeOwned
+            + 'static,
+        A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
+    >(
+        me: NodeID,
         stream: TcpStream,
         cancel: CancellationToken,
         tx: Sender<PeerMessage>,
-        operator: Arc<O>,
+        actor: Addr<A>,
         response_bus: Arc<Mutex<HashMap<CorrelationID, (Notify, Option<T>)>>>,
-    ) -> Self {
+    ) -> Self
+    where
+        <A as Actor>::Context: ToEnvelope<A, T>,
+        <T as actix::Message>::Result: std::marker::Send,
+    {
         Self {
-            task_handle: tokio::spawn(Self::run(stream, cancel, tx, operator, response_bus)),
+            task_handle: tokio::spawn(Self::run(me, stream, cancel, tx, actor, response_bus)),
         }
     }
 
-    async fn run<T: Send + Serialize + DeserializeOwned + 'static, O: Operator<T>>(
+    async fn run<
+        T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
+            + Debug
+            + Send
+            + Serialize
+            + DeserializeOwned
+            + 'static,
+        A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
+    >(
+        me: NodeID,
         stream: TcpStream,
         cancel: CancellationToken,
         tx: Sender<PeerMessage>,
-        operator: Arc<O>,
+        actor: Addr<A>,
         response_bus: Arc<Mutex<HashMap<CorrelationID, (Notify, Option<T>)>>>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<()>
+    where
+        <A as Actor>::Context: ToEnvelope<A, T>,
+        <T as actix::Message>::Result: std::marker::Send,
+    {
         let (mut read, write) = stream.into_split();
         let mut writer_sent = Some(write);
         let mut id = None;
@@ -233,35 +290,59 @@ impl PeerComunication {
                         Ok(protocol_message) => {
                             let from_id = protocol_message.from;
                             let correlation = protocol_message.correlation_id;
+                            let t = &protocol_message.message_type;
 
-                            match correlation{
-                                Some(correlation_id) => {
-                                    // Es posible notifcar apenas se crea porque: Se tiene el lock, las notificaciones se guardan
+                            match (t, correlation) {
+                                (MessageType::Request, corr) => {
+                                        match actor.send(protocol_message.body).await{
+                                            Ok(Ok(a)) => {
+                                                match a{
+                                                    ProtocolEvent::MaybeNew => {
+                                                        if let Some(writer) = writer_sent{
+                                                            let _ = tx.send(PeerMessage::PeerUp(from_id, writer));
+                                                            id = Some(from_id);
+                                                            writer_sent = None;
+                                                        }
+                                                    },
+                                                    ProtocolEvent::Response(response) => {
+                                                        Self::send_back(&tx, from_id, InterNodeMessage{
+                                                            from: me,
+                                                            correlation_id: corr,
+                                                            message_type: MessageType::Response,
+                                                            body: response
+                                                        });
+                                                    }
+                                                    ProtocolEvent::Teardown => {
+                                                        break;
+                                                    }
+                                                    _ => {},
+                                                }
+                                            },
+                                            Ok(Err(e)) => Self::send_back(&tx, from_id, InterNodeMessage {
+                                                from: me,
+                                                correlation_id: None,
+                                                message_type: MessageType::Error,
+                                                body: format!("{:?}", e)
+                                            }),
+                                            Err(e) => Self::send_back(&tx, from_id, InterNodeMessage {
+                                                from: me,
+                                                correlation_id: None,
+                                                message_type: MessageType::Error,
+                                                body: "Server error"
+                                            }),
+                                        };
+                                },
+                                (MessageType::Response | MessageType::Error, Some(corr_id)) => {
                                     let mut responses = response_bus.lock().await;
                                     let notif = Notify::new();
                                     notif.notify_one();
-                                    if let Some((old_notif, _)) = responses.insert(correlation_id, (notif, Some(protocol_message.body))){
+                                    if let Some((old_notif, _)) = responses.insert(corr_id, (notif, Some(protocol_message.body))){
                                         old_notif.notify_one()
                                     }
                                 },
-                                None => {
-                                    match operator.handle(from_id, protocol_message.body){
-                                        Ok(ProtocolEvent::MaybeNew) => {
-                                            if let Some(writer) = writer_sent{
-                                                let _ = tx.send(PeerMessage::PeerUp(from_id, writer));
-                                                id = Some(from_id);
-                                                writer_sent = None;
-                                            }
-                                        },
-                                        Ok(ProtocolEvent::Response(_)) => {
-                                            //TODO: mandaselo devuelta, de alguna forma
-                                        }
-                                        Ok(ProtocolEvent::Teardown) => {
-                                            break;
-                                        }
-                                        Err(_) => todo!(),
-                                    }
-                                },
+                                (MessageType::Response | MessageType::Error, None) => {
+                                    error!(format!("There was a response with no correlation ID. Ignoring it {:?}", &protocol_message))
+                                }
                             }
                         }
                         Err(e) => {
@@ -280,10 +361,16 @@ impl PeerComunication {
             let _ = tx.send(PeerMessage::PeerDown(from_id));
         }
 
-        todo!()
+        Ok(())
     }
 
     pub async fn shutdown(self) -> anyhow::Result<()> {
         self.task_handle.await?
+    }
+
+    fn send_back<S: Serialize>(tx: &Sender<PeerMessage>, to: NodeID, msg: InterNodeMessage<S>) {
+        if let Ok(s) = serde_json::to_vec(&msg) {
+            let _ = tx.send(PeerMessage::PeerResponse(to, s));
+        }
     }
 }

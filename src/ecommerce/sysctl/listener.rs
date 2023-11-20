@@ -17,14 +17,14 @@ use crate::{
         node_comm::node_listener::NodeListener,
         protocol::{
             messages::ProtocolMessage,
-            store_glue::{AbsoluteStateUpdate, StoreOperator},
+            store_glue::{AbsoluteStateUpdate, StoreGlue},
         },
     },
 };
 
 pub async fn listen_commands(
     net: Addr<Listener>,
-    mut int_net: NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreOperator>,
+    mut int_net: NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreGlue>,
     store: Addr<StoreActor>,
 ) -> anyhow::Result<()> {
     println!("Reading commands from STDIN");
