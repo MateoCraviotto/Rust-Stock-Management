@@ -1,8 +1,9 @@
 use clap::Parser;
 use rand::seq::SliceRandom;
 use std::{str::FromStr, sync::Arc};
-use tokio::{io::AsyncBufReadExt, net::TcpStream, sync::Mutex};
+use tokio::{net::TcpStream, sync::Mutex};
 use tp::{
+    common::order::read_orders,
     common::order::Order,
     ecommerce::args::Args,
     ecommerce::{
@@ -138,17 +139,6 @@ async fn manage_purchase(
             Ok(PurchaseState::Cancel)
         }
     }
-}
-
-async fn read_orders(filename: String) -> anyhow::Result<Vec<Order>> {
-    let mut orders = vec![];
-    let file = tokio::fs::File::open(filename).await?;
-    let mut lines = tokio::io::BufReader::new(file).lines();
-    while let Some(line) = lines.next_line().await? {
-        orders.push(Order::from_str(&line)?);
-    }
-
-    Ok(orders)
 }
 
 fn get_closest_store(ports: Vec<u16>) -> Option<u16> {
