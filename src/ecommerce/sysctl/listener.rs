@@ -1,22 +1,32 @@
-use std::{str::FromStr, sync::Arc};
+use std::str::FromStr;
 
 use actix::Addr;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
-    sync::Mutex,
     task::JoinHandle,
 };
 
 use crate::{
     ecommerce::{
         network::{listen::Listener, ListenerState},
-        purchases::store::Store,
+        purchases::store::{Stock, StoreActor},
         sysctl::command::Command,
     },
     error, info,
+    local::{
+        node_comm::node_listener::NodeListener,
+        protocol::{
+            messages::ProtocolMessage,
+            store_glue::{AbsoluteStateUpdate, StoreOperator},
+        },
+    },
 };
 
-pub async fn listen_commands(net: Addr<Listener>, store: Arc<Mutex<Store>>) -> anyhow::Result<()> {
+pub async fn listen_commands(
+    net: Addr<Listener>,
+    mut int_net: NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreOperator>,
+    store: Addr<StoreActor>,
+) -> anyhow::Result<()> {
     println!("Reading commands from STDIN");
 
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
@@ -35,11 +45,15 @@ pub async fn listen_commands(net: Addr<Listener>, store: Arc<Mutex<Store>>) -> a
                     Command::Shutdown => {
                         info!("Shutdown order was given");
                         net.do_send(ListenerState::Shutdown);
+                        int_net.shutdown().await;
                         break 'main;
                     }
                     Command::NetUp => {
                         info!("Network Up order was given");
                         t.push(start_listener(net.clone()));
+                        if !int_net.is_running() {
+                            int_net = int_net.restart().await;
+                        }
                         println!("Network was connected");
                     }
                     Command::NetDown => {
@@ -49,6 +63,11 @@ pub async fn listen_commands(net: Addr<Listener>, store: Arc<Mutex<Store>>) -> a
                         // in next iteration. Will block until all disconnections happened
                         let _ = futures::future::join_all(t).await;
                         t = vec![];
+
+                        if int_net.is_running() {
+                            int_net = int_net.shutdown().await;
+                        }
+
                         println!("Network was disconnected");
                     }
                     Command::Sell(o) => {
@@ -60,18 +79,7 @@ pub async fn listen_commands(net: Addr<Listener>, store: Arc<Mutex<Store>>) -> a
                         info!(format!("New orders were issued. Info in: {:?}", f));
                         //TODO: read file, read line by line, send to actor that modifies things
                     }
-                    Command::AddStock(o) => {
-                        store
-                            .as_ref()
-                            .lock()
-                            .await
-                            .add_product_stock(o.get_product(), o.get_qty());
-                        info!(format!("New stock was added: {:?}", o));
-                        info!(format!(
-                            "Store stock: {:?}",
-                            store.as_ref().lock().await.get_products()
-                        ));
-                    }
+                    Command::AddStock(o) => {}
                 },
                 Err(e) => {
                     error!(format!("The given command was not able to parse: {:?} ", e));

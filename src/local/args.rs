@@ -16,6 +16,10 @@ pub struct Args {
     #[arg(short, long)]
     pub intern_port: u16,
 
+    /// Port where to try to connect for other nodes
+    #[arg(short, long)]
+    pub node_ports: Vec<u16>,
+
     /// ID of the store node
     #[arg(short, long)]
     pub store_id: u64,

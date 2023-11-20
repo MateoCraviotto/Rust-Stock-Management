@@ -1,8 +1,8 @@
+use crate::local::{NodeID, RequestID};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum MessageType {
-    Hello,
     Goodbye,
     Update,
     Request,
@@ -18,17 +18,22 @@ pub enum RequestState {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ProtocolMessage<T> {
-    req_node_id: u64,
-    res_node_id: u64,
+pub struct ProtocolMessage<M, S> {
     message_type: MessageType,
-    request_information: Option<RequestInformation<T>>,
-    update_information: Option<T>,
+    request_information: Option<Request<M>>,
+    update_information: Option<Vec<S>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RequestInformation<T> {
-    request_id: u128,
+pub struct Request<M> {
+    request_id: RequestID,
+    requester: NodeID,
     request_state: RequestState,
-    information: Option<T>,
+    information: Option<NodeModification<M>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NodeModification<M> {
+    affected: NodeID,
+    modifications: Vec<M>,
 }

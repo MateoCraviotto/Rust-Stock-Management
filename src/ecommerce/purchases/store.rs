@@ -1,42 +1,49 @@
 use std::collections::HashMap;
 
-use actix::{Addr, Actor, Context, Handler};
+use actix::{Actor, Addr, Context, Handler};
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
 use crate::{common::order::Order, ecommerce::network::listen::Listener, error, info};
 
-use super::{purchase_state::PurchaseState, messages::{StoreMessage, StoreID, RequestID, MessageType}};
+use super::{
+    messages::{MessageType, RequestID, StoreID, StoreMessage},
+    purchase_state::PurchaseState,
+};
 
 pub type Stock = HashMap<u64, u64>;
 
 #[derive(Clone)]
-struct StoreInformation{
+struct StoreInformation {
     stock: Stock,
     transactions: HashMap<RequestID, Transaction>,
-    is_online: bool
+    is_online: bool,
 }
 
-
-#[derive(Clone)]
-enum TransactionState{
+#[derive(Serialize, Deserialize, Debug, Clone)]
+enum TransactionState {
     Cancelled,
     AwaitingConfirmation,
     NodeConfirmed,
     Finalized,
 }
 
-#[derive(Clone)]
-pub struct Transaction{
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Transaction {
     id: RequestID,
     state: TransactionState,
-    involved_stock: HashMap<StoreID,Stock>
+    involved_stock: HashMap<StoreID, Stock>,
 }
 
-impl StoreInformation{
-    fn random() -> Self{
+impl StoreInformation {
+    fn random() -> Self {
         let stock = HashMap::new();
-        
-        Self { stock, is_online: false, transactions: HashMap::new() }
+
+        Self {
+            stock,
+            is_online: false,
+            transactions: HashMap::new(),
+        }
     }
 
     fn is_online(&mut self, is_online: bool) {
@@ -169,13 +176,17 @@ impl Actor for StoreActor {
     type Context = Context<Self>;
 }
 
-impl Handler<StoreMessage> for StoreActor{
+impl Handler<StoreMessage> for StoreActor {
     type Result = Option<Transaction>;
 
     fn handle(&mut self, msg: StoreMessage, _ctx: &mut Self::Context) -> Self::Result {
         match msg {
-            StoreMessage { message_type: MessageType::Update(store_id), new_stock, 
-                transactions , orders: _} => {
+            StoreMessage {
+                message_type: MessageType::Update(store_id),
+                new_stock,
+                transactions,
+                orders: _,
+            } => {
                 let info = self.stores.get_mut(&store_id);
                 match info {
                     Some(info) => {
@@ -185,7 +196,7 @@ impl Handler<StoreMessage> for StoreActor{
                         if let Some(t) = transactions {
                             info.transactions = t;
                         }
-                    },
+                    }
                     None => {
                         let mut info = Self::create_info();
                         if let Some(s) = new_stock {
@@ -199,10 +210,13 @@ impl Handler<StoreMessage> for StoreActor{
                 }
 
                 return None;
-            },
-            StoreMessage { message_type: MessageType::Request, new_stock: _, 
-                transactions: _, orders} => {
-
+            }
+            StoreMessage {
+                message_type: MessageType::Request,
+                new_stock: _,
+                transactions: _,
+                orders,
+            } => {
                 let new_transaction_id = self.stores[&self.self_id].transactions.len() as u64;
                 let stores_clone = self.stores.clone();
                 let self_info = stores_clone.get(&self.self_id).cloned();
@@ -216,20 +230,20 @@ impl Handler<StoreMessage> for StoreActor{
                         };
                         // Check which orders I can complete (local_orders)
                         // Send the rest to other node(s)
-                        let mut involved_stock: HashMap <StoreID, Stock> = HashMap::new();
+                        let mut involved_stock: HashMap<StoreID, Stock> = HashMap::new();
                         let mut local_stock: Stock = Stock::new();
                         let mut remote_stock: Stock = Stock::new();
                         for order in orders {
                             let product = order.get_product();
                             let qty = order.get_qty();
-                            
+
                             if self_info.stock.contains_key(&product) {
                                 let current_qty = self_info.stock[&product];
                                 if current_qty >= qty {
                                     local_stock.insert(product, qty); // Reserve local stock
-                                    self_info.stock.insert(product, current_qty - qty); // Update local stock
+                                    self_info.stock.insert(product, current_qty - qty);
+                                // Update local stock
                                 } else {
-                                    
                                     remote_stock.insert(product, qty);
                                 }
                             } else {
@@ -237,7 +251,7 @@ impl Handler<StoreMessage> for StoreActor{
                             }
                         }
                         involved_stock.insert(self.self_id, local_stock);
-                        
+
                         // Check other nodes for remaining stock in remote_stock
                         // If there is enough stock, reserve it and add it to involved_stock
                         for store_id in stores_clone.keys() {
@@ -252,40 +266,46 @@ impl Handler<StoreMessage> for StoreActor{
                                                 let current_qty = store_info.stock[&product];
                                                 if current_qty >= qty {
                                                     store_stock.insert(product, qty); // Reserve node stock
-                                                    store_info.stock.insert(product, current_qty - qty); // Update node stock
+                                                    store_info
+                                                        .stock
+                                                        .insert(product, current_qty - qty); // Update node stock
                                                     remote_stock.remove(&product);
                                                 }
                                             }
                                         }
                                         self.stores.insert(*store_id, store_info);
                                         involved_stock.insert(*store_id, store_stock);
-                                    },
+                                    }
                                     None => {
                                         continue;
                                     }
                                 }
                             }
                         }
-        
+
                         let mut rng = rand::thread_rng(); // Change this
                         let id: RequestID = rng.gen();
-                        let transaction: Transaction = Transaction{
+                        let transaction: Transaction = Transaction {
                             id: new_transaction_id,
                             state: TransactionState::AwaitingConfirmation,
-                            involved_stock: involved_stock
+                            involved_stock: involved_stock,
                         };
                         self_info.transactions.insert(id, transaction.clone());
                         self.stores.insert(self.self_id, self_info);
-        
+
                         Some(transaction)
-                    },
+                    }
                     None => {
                         return None;
                     }
                 }
-            },
-            StoreMessage { message_type: MessageType::Commit(request_id), new_stock: _, 
-                transactions: _, orders: _  } => {
+            }
+            StoreMessage {
+                message_type: MessageType::Commit(request_id),
+                new_stock: _,
+                transactions: _,
+                orders: _,
+            } => {
                 let self_info = self.stores.get_mut(&self.self_id);
                 let self_info = match self_info {
                     Some(self_info) => self_info,
@@ -297,17 +317,23 @@ impl Handler<StoreMessage> for StoreActor{
                 match transaction {
                     Some(mut transaction) => {
                         transaction.state = TransactionState::NodeConfirmed;
-                        self_info.transactions.insert(request_id, transaction.clone());
+                        self_info
+                            .transactions
+                            .insert(request_id, transaction.clone());
                         Some(transaction)
-                    },
+                    }
                     None => {
                         return None;
                     }
                 }
-            },
+            }
 
-            StoreMessage { message_type: MessageType::Cancel(request_id), new_stock: _, 
-                transactions: _, orders: _ } => {
+            StoreMessage {
+                message_type: MessageType::Cancel(request_id),
+                new_stock: _,
+                transactions: _,
+                orders: _,
+            } => {
                 let stores_clone = self.stores.clone();
                 let self_info = stores_clone.get(&self.self_id).cloned();
                 let mut self_info = match self_info {
@@ -332,18 +358,20 @@ impl Handler<StoreMessage> for StoreActor{
                                 let current_qty = store_info.stock[&product];
                                 store_info.stock.insert(*product, current_qty + qty);
                             }
-                        },
+                        }
                         None => {
                             continue;
                         }
                     }
                 }
                 transaction.state = TransactionState::Cancelled;
-                self_info.transactions.insert(request_id, transaction.clone());
+                self_info
+                    .transactions
+                    .insert(request_id, transaction.clone());
                 // Add changes in the cloned transaction to the store
                 self.stores.insert(self.self_id, self_info.clone());
                 Some(transaction)
-            },
+            }
         }
     }
 }

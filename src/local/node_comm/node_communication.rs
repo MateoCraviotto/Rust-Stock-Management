@@ -1,7 +1,7 @@
-use std::{collections::HashMap, fmt::Write, sync::Arc, time::Duration};
-
 use anyhow::{anyhow, bail};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::fmt::Debug;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{tcp::OwnedWriteHalf, TcpStream},
@@ -14,9 +14,11 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{debug, local::node_comm::protocol::ProtocolEvent};
+use crate::debug;
+use crate::local::node_comm::ProtocolEvent;
+use crate::local::NodeID;
 
-use super::{protocol::Operator, NodeID};
+use super::Operator;
 
 type CorrelationID = u64;
 
@@ -32,7 +34,7 @@ pub enum PeerMessage {
 }
 
 pub struct NodeCommunication<
-    T: Send + Serialize + DeserializeOwned + 'static,
+    T: Debug + Send + Serialize + DeserializeOwned + 'static,
     O: Operator<T> + 'static,
 > {
     me: NodeID,
@@ -44,9 +46,11 @@ pub struct NodeCommunication<
     operator: Arc<O>,
 }
 
-impl<T: Send + Serialize + DeserializeOwned + 'static, O: Operator<T>> NodeCommunication<T, O> {
-    pub fn start(cancel: CancellationToken, me: NodeID, operator: O) -> Arc<Self> {
-        let (peer_tx, peer_rx) = mpsc::channel(1 << 16);
+impl<T: Debug + Send + Serialize + DeserializeOwned + 'static, O: Operator<T>>
+    NodeCommunication<T, O>
+{
+    pub fn start(cancel: CancellationToken, me: NodeID, operator: Arc<O>) -> Arc<Self> {
+        let (peer_tx, peer_rx) = mpsc::channel(256);
         let this = Arc::new(Self {
             me,
             cancel,
@@ -54,7 +58,7 @@ impl<T: Send + Serialize + DeserializeOwned + 'static, O: Operator<T>> NodeCommu
             peer_task_tx: peer_tx,
             peers_writer: Mutex::new(HashMap::new()),
             responses: Arc::new(Mutex::new(HashMap::new())),
-            operator: Arc::new(operator),
+            operator: operator,
         });
 
         let _ = tokio::spawn(Self::run(this.clone()));
@@ -155,6 +159,8 @@ impl<T: Send + Serialize + DeserializeOwned + 'static, O: Operator<T>> NodeCommu
                     }
 
                     _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                        // If this happens, it means that the connection is probably down
+                        // but this shouldn't be decided here, let the stream be the one to decide.
                         timeout = true;
                         break;
                     }
@@ -214,7 +220,7 @@ impl PeerComunication {
             let mut buffer = vec![0; 1 << 16];
             select! {
                 r = read.read(&mut buffer) => {
-                    if let Err(e) = r{
+                    if let Err(_) = r{
                         break;
                     }
                     let n = r.unwrap();
@@ -239,7 +245,7 @@ impl PeerComunication {
                                     }
                                 },
                                 None => {
-                                    match operator.handle(protocol_message.body){
+                                    match operator.handle(from_id, protocol_message.body){
                                         Ok(ProtocolEvent::MaybeNew) => {
                                             if let Some(writer) = writer_sent{
                                                 let _ = tx.send(PeerMessage::PeerUp(from_id, writer));
@@ -247,6 +253,12 @@ impl PeerComunication {
                                                 writer_sent = None;
                                             }
                                         },
+                                        Ok(ProtocolEvent::Response(_)) => {
+                                            //TODO: mandaselo devuelta, de alguna forma
+                                        }
+                                        Ok(ProtocolEvent::Teardown) => {
+                                            break;
+                                        }
                                         Err(_) => todo!(),
                                     }
                                 },
@@ -264,7 +276,7 @@ impl PeerComunication {
             }
         }
 
-        if let Some(from_id) = id{
+        if let Some(from_id) = id {
             let _ = tx.send(PeerMessage::PeerDown(from_id));
         }
 
