@@ -1,6 +1,12 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-24ddc0f5d75046c5622901739e7c5dd533143b0c8e959d652212380cedb1ea36.svg)](https://classroom.github.com/a/AdDZ0HGe)
 [![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-718a45dd9cf7e7f842a935f5ebbe5719a5e09af4491e668f4dbf3b35d5cca122.svg)](https://classroom.github.com/online_ide?assignment_repo_id=12665254&assignment_repo_type=AssignmentRepo)
 
+# Trabajo Práctico 2c2023 - Sistema de stocks
+
+## Integrantes
+- Tomás Apaldetti
+- Mateo Craviotto
+
 ## Supuestos
 Para la seleccion y el diseño del protocolo de concurrencia distribuida se asumio lo siguiente
 - Utilizar recursos de otro nodo es la ultima opcion: Se toma con que cada local va a tratar de sastifacer los pedidos del e-commerce localmente, y si no puede tratara de usar stocks de otros nodos
