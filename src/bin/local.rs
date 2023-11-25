@@ -21,14 +21,14 @@ async fn main() -> anyhow::Result<()> {
     );
     println!(
         "Starting the inter-node communication in address: {}:{}. Should connect to: {:?}",
-        args.ip, args.intern_port, args.node_ports
+        args.ip, args.port_intern, args.node_ports
     );
 
     let result = start(
         args.store_id,
         args.ip,
         args.extern_port,
-        args.intern_port,
+        args.port_intern,
         args.node_ports,
     )
     .await;

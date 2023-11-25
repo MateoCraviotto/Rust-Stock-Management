@@ -14,7 +14,7 @@ pub struct Args {
 
     /// Port where to start to listen for inter node communications
     #[arg(short, long)]
-    pub intern_port: u16,
+    pub port_intern: u16,
 
     /// Port where to try to connect for other nodes
     #[arg(short, long)]

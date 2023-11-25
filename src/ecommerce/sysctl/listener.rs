@@ -98,7 +98,7 @@ pub async fn listen_commands(
                         let mut stock_to_add = Stock::new();
                         stock_to_add.insert(o.get_product(), o.get_qty());
                         let _ = store.do_send(StoreMessage {
-                            message_type: MessageType::LocalRequest,
+                            message_type: MessageType::AddStock,
                             new_stock: Some(stock_to_add),
                             transactions: None,
                             orders: None,

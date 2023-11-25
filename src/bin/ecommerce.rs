@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
         let order_clone = order.clone(); // clone order to send to store
         let client_clone = client.clone();
         // Create tokio task for each order
-        let t = tokio::spawn(async move {
+        let t: tokio::task::JoinHandle<()> = tokio::spawn(async move {
             match manage_purchase(order_clone, client_clone).await {
                 Ok(state) => {
                     println!("Purchase state: {:?}", state.to_string());

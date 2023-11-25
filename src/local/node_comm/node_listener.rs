@@ -1,7 +1,4 @@
-use actix::{
-    dev::ToEnvelope,
-    Actor, Addr, Message, ResponseActFuture,
-};
+use actix::{dev::ToEnvelope, Actor, Addr, Message, ResponseActFuture};
 use anyhow::bail;
 use core::fmt::Debug;
 use serde::{de::DeserializeOwned, Serialize};

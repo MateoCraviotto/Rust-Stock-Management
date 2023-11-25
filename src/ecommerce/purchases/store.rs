@@ -316,7 +316,7 @@ impl Handler<StoreMessage> for StoreActor {
                 let transaction = self_info.transactions.get(&request_id).cloned();
                 match transaction {
                     Some(mut transaction) => {
-                        transaction.state = TransactionState::NodeConfirmed;
+                        transaction.state = TransactionState::Finalized;
                         self_info
                             .transactions
                             .insert(request_id, transaction.clone());
@@ -405,11 +405,17 @@ impl Handler<StoreMessage> for StoreActor {
                             // Update local stock
                             local_stock.insert(product, qty); // Reserve local stock
                         } else {
-                            println!("Not enough stock of product {}", product);
+                            println!(
+                                "Not enough stock of product {}. Current stock is {}",
+                                product, current_qty
+                            );
                             return None;
                         }
                     } else {
-                        println!("Not enough stock of product {}", product);
+                        println!(
+                            "Not enough stock of product {}. Current stock is 0.",
+                            product
+                        );
                         return None;
                     }
                 }
@@ -421,6 +427,8 @@ impl Handler<StoreMessage> for StoreActor {
                 self.stores.insert(self.self_id, self_info);
                 let mut involved_stock: HashMap<u64, Stock> = HashMap::new();
                 involved_stock.insert(self.self_id, local_stock);
+
+                println!("Updated stock: {:?}", self.stores[&self.self_id].stock);
 
                 return Some(Transaction {
                     id: 0,
@@ -457,6 +465,7 @@ impl Handler<StoreMessage> for StoreActor {
                     }
                 }
                 self.stores.insert(self.self_id, self_info);
+                println!("Current stock: {:?}", self.stores[&self.self_id].stock);
                 None
             }
             StoreMessage {
@@ -505,6 +514,35 @@ impl Handler<StoreMessage> for StoreActor {
                 if let Some(me) = self.stores.get_mut(&self.self_id) {
                     me.transactions.insert(request_id, transaction.clone());
                 }
+                Some(transaction)
+            }
+            StoreMessage {
+                message_type: MessageType::Confirm(request_id),
+                new_stock: _,
+                transactions: _,
+                orders: _,
+            } => {
+                let stores_clone = self.stores.clone();
+                let self_info = stores_clone.get(&self.self_id).cloned();
+                let mut self_info = match self_info {
+                    Some(self_info) => self_info,
+                    None => {
+                        return None;
+                    }
+                };
+                let transaction = self_info.transactions.get(&request_id).cloned();
+                let mut transaction = match transaction {
+                    Some(transaction) => transaction,
+                    None => {
+                        return None;
+                    }
+                };
+                transaction.state = TransactionState::NodeConfirmed;
+                self_info
+                    .transactions
+                    .insert(request_id, transaction.clone());
+                // Add changes in the cloned transaction to the store
+                self.stores.insert(self.self_id, self_info.clone());
                 Some(transaction)
             }
         }
