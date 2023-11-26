@@ -1,10 +1,10 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, collections::HashMap};
 
 use actix::{Actor, ActorFutureExt, Addr, Context, Handler, ResponseActFuture, WrapFuture};
 use tokio::{net::TcpListener, select};
 use tokio_util::sync::CancellationToken;
 
-use crate::{debug, ecommerce::purchases::store::StoreActor, info};
+use crate::{debug, ecommerce::purchases::store::StoreActor, info, local::{node_comm::node_listener::NodeListener, protocol::{messages::ProtocolMessage, store_glue::{AbsoluteStateUpdate, StoreGlue}}}};
 
 use super::{connection::Communication, CurrentState, ListenerState};
 
@@ -14,16 +14,18 @@ pub struct Listener {
     ip: Ipv4Addr,
     cancel_token: CancellationToken,
     store: Addr<StoreActor>,
+    internal_listener: NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>,
 }
 
 impl Listener {
-    pub fn new(ip: Ipv4Addr, port: u16, store: Addr<StoreActor>) -> Self {
+    pub fn new(ip: Ipv4Addr, port: u16, store: Addr<StoreActor>, internal_listener: NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>) -> Self {
         Listener {
             current_state: CurrentState::Waiting,
             cancel_token: CancellationToken::new(),
             port,
             ip,
             store,
+            internal_listener,
         }
     }
 }
@@ -50,7 +52,7 @@ impl Handler<ListenerState> for Listener {
                 let a = to.clone();
                 self.current_state = CurrentState::Listening;
                 Box::pin(
-                    start_listening(to, cancellation, self.store.clone())
+                    start_listening(to, cancellation, self.store.clone(), self.internal_listener.clone())
                         .into_actor(self)
                         .map(move |result, me, _ctx| {
                             debug!(format!("Finishing the listening on {}", a));
@@ -84,6 +86,7 @@ async fn start_listening(
     to: String,
     cancel: CancellationToken,
     store: Addr<StoreActor>,
+    internal_listener: NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>,
 ) -> anyhow::Result<()> {
     let listener = TcpListener::bind(&to).await?;
     let mut connected = vec![];
@@ -95,7 +98,7 @@ async fn start_listening(
             conn_result = listener.accept() => {
                 let (stream, addr) = conn_result?;
                 info!(format!("New connection for {}", addr));
-                let (actor, task) = Communication::new(stream, store.clone());
+                let (actor, task) = Communication::new(stream, store.clone(), internal_listener.clone());
                 let new = actor.start();
                 let _ = new.do_send(ListenerState::Start);
                 tasks.push(task);

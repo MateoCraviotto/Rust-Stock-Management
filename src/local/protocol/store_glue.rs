@@ -15,15 +15,16 @@ use crate::{ecommerce::purchases::store::Stock, local::node_comm::ProtocolEvent}
 
 use super::messages::{ProtocolMessage, ProtocolMessageType, RequestAction};
 
-#[derive(Serialize, Deserialize, Debug, Message)]
+#[derive(Serialize, Deserialize, Debug, Message, Clone)]
 #[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
 pub struct AbsoluteStateUpdate {
-    stock_update: Option<Stock>,
-    transaction_update: Option<Vec<Transaction>>,
+    pub stock_update: Option<Stock>,
+    pub transaction_update: Option<Vec<Transaction>>,
 }
 
 pub type ProtocolStoreMessage = ProtocolMessage<Stock, AbsoluteStateUpdate>;
 
+#[derive(Clone)]
 pub struct StoreGlue {
     me: StoreID,
     store: Addr<StoreActor>,

@@ -37,13 +37,11 @@ async fn main() -> anyhow::Result<()> {
                 Ok(state) => {
                     println!("Purchase state: {:?}", state.to_string());
                     match state {
-                        PurchaseState::Confirm => {
-                            println!("Purchase confirmed");
+                        PurchaseState::Commit(id) => {
+                            println!("Purchase completed. Id: {}", id);
                         }
                         _ => {
-                            println!("Purchase cancelled. Retrying with next closest store.");
-                            // ports.pop
-                            // get next closest store
+                            println!("Purchase cancelled.");
                         }
                     }
                 }
@@ -69,74 +67,46 @@ async fn manage_purchase(
     write_socket(store.clone(), &order.to_string()).await?;
     println!("Sent order {:?} to store.", order.to_string());
 
-    let answer = match read_socket(store.clone()).await {
-        Ok(answer) => {
-            println!(
-                "Store answered {} to order {:?}",
-                answer,
-                order.get_product()
-            );
-            answer
-        }
-        Err(e) => {
-            println!("Error while reading answer from store: {}", e);
-            PurchaseState::Cancel.to_string()
-        }
-    };
+    let answer = read_socket(store.clone()).await?;
+    println!(
+        "Store answered {} to order {:?}",
+        answer,
+        order
+    );
 
-    let answer_state = match PurchaseState::from_str(&answer) {
-        Ok(s) => s,
-        Err(e) => {
-            println!("Error while parsing answer from store: {}", e);
-            PurchaseState::Cancel
-        }
-    };
+    let answer_state = PurchaseState::from_str(&answer)?;
 
     match answer_state {
-        PurchaseState::Reserve => {
+        PurchaseState::Confirm(id) => {
             println!("Stock reserved");
-            println!("Confirming purchase");
-            let confirmation = format!("{}{}", PurchaseState::Confirm.to_string(), "\n");
-            write_socket(store.clone(), &confirmation).await?;
-            let answer = match read_socket(store.clone()).await {
-                Ok(answer) => {
-                    println!(
-                        "Store answered: {} to order {:?}",
-                        answer,
-                        order.to_string()
-                    );
-                    answer
-                }
-                Err(e) => {
-                    println!("Error while reading answer from store: {}", e);
-                    PurchaseState::Cancel.to_string()
-                }
-            };
-            let confirmation_state = match PurchaseState::from_str(&answer) {
-                Ok(s) => s,
-                Err(e) => {
-                    println!("Error while parsing answer from store: {}", e);
-                    PurchaseState::Cancel
-                }
-            };
+            println!("Committing purchase");
+            // todo: Add logic to cancel some purchases
+            let commit_msg = PurchaseState::Commit(id).to_string();
+            write_socket(store.clone(), &commit_msg).await?;
+            let answer = read_socket(store.clone()).await?;
+            let confirmation_state = PurchaseState::from_str(&answer)?;
 
             match confirmation_state {
-                PurchaseState::Confirm => {
-                    println!("Purchase {:?} confirmed", order.to_string());
-                    Ok(PurchaseState::Confirm)
+                PurchaseState::Commit(id) => {
+                    println!("Purchase with id {} and order {:?} confirmed", id, order.to_string());
+                    Ok(confirmation_state)
                 }
                 _ => {
                     println!(
                         "Purchase was not confirmed. Cancelling purchase {:?}.",
                         order.to_string()
                     ); // Should look in next store
-                    Ok(PurchaseState::Cancel)
+                    Ok(PurchaseState::Cancel(id))
                 }
             }
         }
-        _ => {
-            println!("The order {:?} was cancelled", order.to_string()); // check this
-            Ok(PurchaseState::Cancel)
+        PurchaseState::Cancel(id) => {
+            println!("The order {:?} with id {} was cancelled", order.to_string(), id); // check this
+            Ok(PurchaseState::Cancel(id))
+        },
+        PurchaseState::Commit(id) => {
+            println!("The order {:?} with id {} has been committed. Purchase was completed successfully", order.to_string(), id); // check this
+            Ok(PurchaseState::Commit(id))
         }
     }
 }

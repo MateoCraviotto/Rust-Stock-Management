@@ -6,7 +6,7 @@ use std::{net::Ipv4Addr, sync::Arc};
 use tokio::{
     net::{TcpListener, TcpStream, ToSocketAddrs},
     select,
-    task::JoinHandle,
+    task::JoinHandle, sync::Mutex,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -17,6 +17,7 @@ use super::{
     NodeID, ProtocolEvent,
 };
 
+#[derive(Clone)]
 pub struct NodeListener<
     T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
         + Debug
@@ -26,7 +27,7 @@ pub struct NodeListener<
         + 'static,
     A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
 > {
-    me: NodeID,
+    pub me: NodeID,
     port: u16,
     ip: Ipv4Addr,
     initial_list: Vec<u16>,
@@ -34,7 +35,7 @@ pub struct NodeListener<
 
     cancel: Option<CancellationToken>,
     node_comm: Option<Arc<NodeCommunication<T, A>>>,
-    task_handle: Option<JoinHandle<anyhow::Result<()>>>,
+    task_handle: Option<Arc<Mutex<JoinHandle<anyhow::Result<()>>>>>,
 }
 
 impl<
@@ -75,7 +76,7 @@ where
             initial_list,
             operator,
             cancel: Some(cancel),
-            task_handle: Some(handle),
+            task_handle: Some(Arc::new(Mutex::new(handle))),
             node_comm: Some(node_comm),
             me,
         }
@@ -83,7 +84,7 @@ where
 
     pub async fn restart(self) -> Self {
         if let Some(handle) = self.task_handle {
-            let _ = handle.await;
+            let _ = handle.as_ref().lock().await;
         }
         Self::start(
             self.port,
@@ -161,7 +162,7 @@ where
             cancel.cancel();
         }
         if let Some(task) = self.task_handle {
-            let _ = task.await;
+            let _ = task.as_ref().lock().await;
         }
         Self {
             me: self.me,
@@ -175,14 +176,17 @@ where
         }
     }
 
-    pub fn is_running(&self) -> bool {
+    pub async fn is_running(&self) -> bool {
         match &self.task_handle {
-            Some(task) => task.is_finished(),
+            Some(task) => {
+                let task = task.as_ref().lock().await;
+                task.is_finished()
+            },
             None => false,
         }
     }
 
-    async fn commmunicate(&self, node: NodeID, msg: T) -> anyhow::Result<T> {
+    pub async fn commmunicate(&self, node: NodeID, msg: T) -> anyhow::Result<T> {
         debug!(format!(
             "Sending a message to {} and waiting for response. Message: {:?}",
             node, msg
@@ -193,7 +197,7 @@ where
         }
     }
 
-    async fn send_message(&self, node: NodeID, msg: T) -> anyhow::Result<()> {
+    pub async fn send_message(&self, node: NodeID, msg: T) -> anyhow::Result<()> {
         debug!(format!("Sending a message to {}. Message: {:?}", node, msg));
         match &self.node_comm {
             Some(comm) => comm.send_message(node, msg).await,

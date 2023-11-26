@@ -4,7 +4,7 @@ use crate::local::{NodeID, RequestID};
 use actix::Message;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Message)]
+#[derive(Serialize, Deserialize, Debug, Message, Clone)]
 #[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
 pub enum ProtocolMessageType {
     Goodbye,
@@ -12,7 +12,7 @@ pub enum ProtocolMessageType {
     Request,
 }
 
-#[derive(Serialize, Deserialize, Debug, Message)]
+#[derive(Serialize, Deserialize, Debug, Message, Clone, PartialEq)]
 #[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
 
 pub enum RequestAction {
@@ -22,7 +22,7 @@ pub enum RequestAction {
     Cancel,
 }
 
-#[derive(Serialize, Deserialize, Debug, Message)]
+#[derive(Serialize, Deserialize, Debug, Message, Clone)]
 #[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
 
 pub struct ProtocolMessage<M, S> {
@@ -32,7 +32,7 @@ pub struct ProtocolMessage<M, S> {
     pub update_information: Option<S>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Message)]
+#[derive(Serialize, Deserialize, Debug, Message, Clone)]
 #[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
 
 pub struct Request<M> {
@@ -42,7 +42,7 @@ pub struct Request<M> {
     pub information: Option<Vec<NodeModification<M>>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Message)]
+#[derive(Serialize, Deserialize, Debug, Message, Clone)]
 #[rtype(result = "anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>")]
 
 pub struct NodeModification<M> {

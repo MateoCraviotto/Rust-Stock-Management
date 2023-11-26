@@ -55,7 +55,7 @@ pub async fn listen_commands(
                     Command::NetUp => {
                         info!("Network Up order was given");
                         t.push(start_listener(net.clone()));
-                        if !int_net.is_running() {
+                        if !int_net.is_running().await {
                             int_net = int_net.restart().await;
                         }
                         println!("Network was connected");
@@ -68,7 +68,7 @@ pub async fn listen_commands(
                         let _ = futures::future::join_all(t).await;
                         t = vec![];
 
-                        if int_net.is_running() {
+                        if int_net.is_running().await {
                             int_net = int_net.shutdown().await;
                         }
 
