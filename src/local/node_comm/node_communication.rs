@@ -134,18 +134,16 @@ where
     }
 
     pub async fn commmunicate(&self, node: NodeID, msg: T) -> anyhow::Result<T> {
-        let correlation_id = Some(Self::generate_correlation_id());
+        let correlation_id = Self::generate_correlation_id();
         let with_header = InterNodeMessage {
             from: self.me,
-            correlation_id,
+            correlation_id: Some(correlation_id),
             message_type: MessageType::Request,
             body: msg,
         };
         self.send(node, with_header).await?;
 
-        let response = self
-            .get_response(correlation_id.expect("Solar radiaton or what"))
-            .await?;
+        let response = self.get_response(correlation_id).await?;
 
         Ok(response)
     }
@@ -215,7 +213,7 @@ where
     }
 
     fn generate_correlation_id() -> CorrelationID {
-        return 1;
+        1
     }
 }
 
@@ -277,7 +275,7 @@ impl PeerComunication {
             let mut buffer = vec![0; 1 << 16];
             select! {
                 r = read.read(&mut buffer) => {
-                    if let Err(_) = r{
+                    if r.is_err() {
                         break;
                     }
                     let n = r.unwrap();
@@ -299,7 +297,7 @@ impl PeerComunication {
                                                 match a{
                                                     ProtocolEvent::MaybeNew => {
                                                         if let Some(writer) = writer_sent{
-                                                            let _ = tx.send(PeerMessage::PeerUp(from_id, writer));
+                                                            let _ = tx.send(PeerMessage::PeerUp(from_id, writer)).await;
                                                             id = Some(from_id);
                                                             writer_sent = None;
                                                         }
@@ -310,7 +308,7 @@ impl PeerComunication {
                                                             correlation_id: corr,
                                                             message_type: MessageType::Response,
                                                             body: response
-                                                        });
+                                                        }).await;
                                                     }
                                                     ProtocolEvent::Teardown => {
                                                         break;
@@ -323,13 +321,13 @@ impl PeerComunication {
                                                 correlation_id: None,
                                                 message_type: MessageType::Error,
                                                 body: format!("{:?}", e)
-                                            }),
+                                            }).await,
                                             Err(_) => Self::send_back(&tx, from_id, InterNodeMessage {
                                                 from: me,
                                                 correlation_id: None,
                                                 message_type: MessageType::Error,
                                                 body: "Server error"
-                                            }),
+                                            }).await,
                                         };
                                 },
                                 (MessageType::Response | MessageType::Error, Some(corr_id)) => {
@@ -358,7 +356,7 @@ impl PeerComunication {
         }
 
         if let Some(from_id) = id {
-            let _ = tx.send(PeerMessage::PeerDown(from_id));
+            let _ = tx.send(PeerMessage::PeerDown(from_id)).await;
         }
 
         Ok(())
@@ -368,9 +366,13 @@ impl PeerComunication {
         self.task_handle.await?
     }
 
-    fn send_back<S: Serialize>(tx: &Sender<PeerMessage>, to: NodeID, msg: InterNodeMessage<S>) {
+    async fn send_back<S: Serialize>(
+        tx: &Sender<PeerMessage>,
+        to: NodeID,
+        msg: InterNodeMessage<S>,
+    ) {
         if let Ok(s) = serde_json::to_vec(&msg) {
-            let _ = tx.send(PeerMessage::PeerResponse(to, s));
+            let _ = tx.send(PeerMessage::PeerResponse(to, s)).await;
         }
     }
 }

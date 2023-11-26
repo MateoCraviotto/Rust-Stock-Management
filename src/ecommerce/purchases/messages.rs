@@ -22,7 +22,7 @@ impl FromStr for MessageType {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().split_whitespace().collect::<Vec<&str>>()[..] {
+        match s.split_whitespace().collect::<Vec<&str>>()[..] {
             ["update", store_id] => Ok(MessageType::Update(u64::from_str(store_id)?)),
             ["request"] => Ok(MessageType::Request),
             ["ask", request_id] => Ok(MessageType::Ask(u128::from_str(request_id)?)),
@@ -33,7 +33,6 @@ impl FromStr for MessageType {
             ["add_stock"] => Ok(MessageType::AddStock),
             _ => bail!("Invalid message type"),
         }
-        
     }
 }
 

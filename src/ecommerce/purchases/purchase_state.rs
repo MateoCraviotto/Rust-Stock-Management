@@ -24,7 +24,7 @@ impl FromStr for PurchaseState {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().split_whitespace().collect::<Vec<&str>>()[..] {
+        match s.split_whitespace().collect::<Vec<&str>>()[..] {
             ["Confirm", id] => Ok(PurchaseState::Confirm(u128::from_str(id)?)),
             ["Commit", id] => Ok(PurchaseState::Commit(u128::from_str(id)?)),
             ["Cancel", id] => Ok(PurchaseState::Cancel(u128::from_str(id)?)),

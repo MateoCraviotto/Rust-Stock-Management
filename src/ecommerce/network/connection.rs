@@ -1,4 +1,4 @@
-use std::{sync::Arc, str::FromStr, collections::HashMap};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use actix::{Actor, ActorFutureExt, Addr, Context, Handler, ResponseActFuture, WrapFuture};
 use tokio::{
@@ -10,7 +10,25 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{debug, ecommerce::purchases::{store::{StoreActor, Stock, Transaction, TransactionState}, messages::{MessageType, StoreMessage}, purchase_state::PurchaseState}, info, common::order::Order, local::{node_comm::node_listener::NodeListener, protocol::{messages::{ProtocolMessage, ProtocolMessageType, RequestAction, Request, NodeModification}, store_glue::{AbsoluteStateUpdate, StoreGlue}}}};
+use crate::{
+    common::order::Order,
+    debug,
+    ecommerce::purchases::{
+        messages::{MessageType, StoreMessage},
+        purchase_state::PurchaseState,
+        store::{Stock, StoreActor, Transaction, TransactionState},
+    },
+    info,
+    local::{
+        node_comm::node_listener::NodeListener,
+        protocol::{
+            messages::{
+                NodeModification, ProtocolMessage, ProtocolMessageType, Request, RequestAction,
+            },
+            store_glue::{AbsoluteStateUpdate, StoreGlue},
+        },
+    },
+};
 
 use super::ListenerState;
 
@@ -22,7 +40,10 @@ impl Communication {
     pub fn new(
         stream: TcpStream,
         store: Addr<StoreActor>,
-        internal_listener: NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>,
+        internal_listener: NodeListener<
+            ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
+            StoreGlue,
+        >,
     ) -> (Self, JoinHandle<anyhow::Result<()>>) {
         let mine = CancellationToken::new();
         let pair = mine.clone();
@@ -49,13 +70,17 @@ impl Handler<ListenerState> for Communication {
                     "Sending cancellation token for connection, {:?}",
                     self.cancel_token
                 ));
-                Box::pin(async {}.into_actor(self).map(move |_result, _me, _ctx| {
-                    return Ok(());
-                }))
+                Box::pin(
+                    async {}
+                        .into_actor(self)
+                        .map(move |_result, _me, _ctx| Ok(())),
+                )
             }
-            _ => Box::pin(async {}.into_actor(self).map(move |_result, _me, _ctx| {
-                return Ok(());
-            })),
+            _ => Box::pin(
+                async {}
+                    .into_actor(self)
+                    .map(move |_result, _me, _ctx| Ok(())),
+            ),
         }
     }
 }
@@ -64,7 +89,10 @@ async fn serve(
     stream: Arc<Mutex<TcpStream>>,
     token: CancellationToken,
     store: Addr<StoreActor>,
-    internal_listener: NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>,
+    internal_listener: NodeListener<
+        ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
+        StoreGlue,
+    >,
 ) -> anyhow::Result<()> {
     'serving: loop {
         debug!(format!(
@@ -92,7 +120,7 @@ async fn serve(
                         let order_state = store.send(message).await?;
                         match order_state {
                             Some(transaction) => {
-                                
+
                                 if transaction.state == TransactionState::Cancelled {
                                     info!("Purchase cancelled");
                                     // Notify ecommerce
@@ -102,12 +130,12 @@ async fn serve(
 
                                 let node_modifications: Vec<NodeModification<_>> = transaction.involved_stock.iter().map(|(store_id, stock)| {
                                     NodeModification {
-                                        affected: store_id.clone(),
+                                        affected: *store_id,
                                         modifications: vec![stock.clone()],
                                     }
                                 }).collect();
-                                let node_request = get_node_request_with(Some(node_modifications), transaction.id, 
-                                                                         RequestAction::Ask, internal_listener.me.clone());
+                                let node_request = get_node_request_with(Some(node_modifications), transaction.id,
+                                                                         RequestAction::Ask, internal_listener.me);
                                 // Send request to each node involved in the purchase
                                 let mut purchase_cancelled = false;
                                 for (store_id, _) in transaction.involved_stock.clone() {
@@ -154,11 +182,11 @@ async fn serve(
                             },
 
                         }
-                        
+
                     },
                     Err(_) => {
                         // do nothing, it's not an order
-                    } 
+                    }
                 }
                 match PurchaseState::from_str(&data) {
                     Ok(purchase_state) => {
@@ -242,45 +270,52 @@ fn get_node_request_with(
     request_id: u128,
     action: RequestAction,
     me: u64,
-) -> ProtocolMessage<Stock,AbsoluteStateUpdate> {
+) -> ProtocolMessage<Stock, AbsoluteStateUpdate> {
     ProtocolMessage {
         from: me,
         message_type: ProtocolMessageType::Request,
-        request_information: Some(Request{
+        request_information: Some(Request {
             request_id,
             requester: me,
             request_state: action,
             information: node_modifications,
         }),
         update_information: None,
-    } 
+    }
 }
 
 fn get_node_modifications_for(
     involved_stock: HashMap<u64, Stock>,
 ) -> Vec<NodeModification<HashMap<u64, u64>>> {
-    involved_stock.iter().map(|(store_id, stock)| {
-        NodeModification {
-            affected: store_id.clone(),
+    involved_stock
+        .iter()
+        .map(|(store_id, stock)| NodeModification {
+            affected: *store_id,
             modifications: vec![stock.clone()],
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 async fn notify_nodes(
     action: RequestAction,
     transaction: Transaction,
-    internal_listener: NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>,
+    internal_listener: NodeListener<
+        ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
+        StoreGlue,
+    >,
 ) -> anyhow::Result<()> {
-    let me = internal_listener.me.clone();
+    let me = internal_listener.me;
     for (store_id, _) in transaction.involved_stock.clone() {
         if store_id != me {
-            let node_modifications: Vec<NodeModification<_>> = get_node_modifications_for(transaction.involved_stock.clone());
-            let node_request = get_node_request_with(Some(node_modifications), transaction.id, 
-                                                    action.clone(), me);
-            internal_listener.send_message(store_id, node_request).await?;
+            let node_modifications: Vec<NodeModification<_>> =
+                get_node_modifications_for(transaction.involved_stock.clone());
+            let node_request =
+                get_node_request_with(Some(node_modifications), transaction.id, action.clone(), me);
+            internal_listener
+                .send_message(store_id, node_request)
+                .await?;
         }
     }
-    
+
     Ok(())
-} 
+}

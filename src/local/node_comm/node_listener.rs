@@ -6,7 +6,8 @@ use std::{net::Ipv4Addr, sync::Arc};
 use tokio::{
     net::{TcpListener, TcpStream, ToSocketAddrs},
     select,
-    task::JoinHandle, sync::Mutex,
+    sync::Mutex,
+    task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -127,7 +128,7 @@ where
 
         info!("Finished listening for new nodes. Sending the cancel signal to all the childs");
         cancel.cancel();
-        let _ = futures::future::join_all(node_comms.into_iter().map(|nc| nc.shutdown()));
+        let _ = futures::future::join_all(node_comms.into_iter().map(|nc| nc.shutdown())).await;
 
         Ok(())
     }
@@ -153,7 +154,7 @@ where
     ) -> anyhow::Result<PeerComunication> {
         let stream = TcpStream::connect(&to).await?;
         info!(format!("Initial connect to node in {:?}", &to));
-        return Ok(node_comm.new_node(stream));
+        Ok(node_comm.new_node(stream))
     }
 
     pub async fn shutdown(self) -> Self {
@@ -181,7 +182,7 @@ where
             Some(task) => {
                 let task = task.as_ref().lock().await;
                 task.is_finished()
-            },
+            }
             None => false,
         }
     }

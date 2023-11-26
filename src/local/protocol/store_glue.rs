@@ -42,17 +42,15 @@ impl StoreGlue {
 
         let (stock, transactions) = message
             .update_information
-            .and_then(|updates| Some((updates.stock_update, updates.transaction_update)))?;
+            .map(|updates| (updates.stock_update, updates.transaction_update))?;
 
         let new_stock = stock;
 
-        let transactions = transactions.and_then(|transactions| {
-            Some(
-                transactions
-                    .into_iter()
-                    .map(|t| (t.id, t))
-                    .collect::<HashMap<_, _>>(),
-            )
+        let transactions = transactions.map(|transactions| {
+            transactions
+                .into_iter()
+                .map(|t| (t.id, t))
+                .collect::<HashMap<_, _>>()
         });
 
         Some(StoreMessage {
@@ -69,7 +67,7 @@ impl StoreGlue {
     ) -> Option<(RequestID, StoreMessage)> {
         let (id, state, information) = message
             .request_information
-            .and_then(|info| Some((info.request_id, info.request_state, info.information)))?;
+            .map(|info| (info.request_id, info.request_state, info.information))?;
 
         let message_type = Self::get_transaction_type(id, state);
 
@@ -123,8 +121,8 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
     type Result = ResponseActFuture<Self, anyhow::Result<ProtocolEvent<ProtocolStoreMessage>>>;
 
     fn handle(&mut self, msg: ProtocolStoreMessage, _ctx: &mut Self::Context) -> Self::Result {
-        let store = (&self.store).clone();
-        let me = self.me.clone();
+        let store = self.store.clone();
+        let me = self.me;
         let from = msg.from;
         Box::pin(
             async move {
@@ -171,9 +169,7 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                 }
             }
             .into_actor(self)
-            .map(move |_result, _me, _ctx| {
-                return Ok(ProtocolEvent::Nothing);
-            }),
+            .map(move |_result, _me, _ctx| Ok(ProtocolEvent::Nothing)),
         )
     }
 }

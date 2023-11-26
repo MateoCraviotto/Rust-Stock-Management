@@ -1,10 +1,21 @@
-use std::{net::Ipv4Addr, collections::HashMap};
+use std::{collections::HashMap, net::Ipv4Addr};
 
 use actix::{Actor, ActorFutureExt, Addr, Context, Handler, ResponseActFuture, WrapFuture};
 use tokio::{net::TcpListener, select};
 use tokio_util::sync::CancellationToken;
 
-use crate::{debug, ecommerce::purchases::store::StoreActor, info, local::{node_comm::node_listener::NodeListener, protocol::{messages::ProtocolMessage, store_glue::{AbsoluteStateUpdate, StoreGlue}}}};
+use crate::{
+    debug,
+    ecommerce::purchases::store::StoreActor,
+    info,
+    local::{
+        node_comm::node_listener::NodeListener,
+        protocol::{
+            messages::ProtocolMessage,
+            store_glue::{AbsoluteStateUpdate, StoreGlue},
+        },
+    },
+};
 
 use super::{connection::Communication, CurrentState, ListenerState};
 
@@ -14,11 +25,20 @@ pub struct Listener {
     ip: Ipv4Addr,
     cancel_token: CancellationToken,
     store: Addr<StoreActor>,
-    internal_listener: NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>,
+    internal_listener:
+        NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>,
 }
 
 impl Listener {
-    pub fn new(ip: Ipv4Addr, port: u16, store: Addr<StoreActor>, internal_listener: NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>) -> Self {
+    pub fn new(
+        ip: Ipv4Addr,
+        port: u16,
+        store: Addr<StoreActor>,
+        internal_listener: NodeListener<
+            ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
+            StoreGlue,
+        >,
+    ) -> Self {
         Listener {
             current_state: CurrentState::Waiting,
             cancel_token: CancellationToken::new(),
@@ -52,31 +72,36 @@ impl Handler<ListenerState> for Listener {
                 let a = to.clone();
                 self.current_state = CurrentState::Listening;
                 Box::pin(
-                    start_listening(to, cancellation, self.store.clone(), self.internal_listener.clone())
-                        .into_actor(self)
-                        .map(move |result, me, _ctx| {
-                            debug!(format!("Finishing the listening on {}", a));
-                            me.current_state = CurrentState::Waiting;
-                            return result;
-                        }),
+                    start_listening(
+                        to,
+                        cancellation,
+                        self.store.clone(),
+                        self.internal_listener.clone(),
+                    )
+                    .into_actor(self)
+                    .map(move |result, me, _ctx| {
+                        debug!(format!("Finishing the listening on {}", a));
+                        me.current_state = CurrentState::Waiting;
+                        result
+                    }),
                 )
             }
             (ListenerState::Down | ListenerState::Shutdown, CurrentState::Listening) => {
                 let cancellation = self.cancel_token.clone();
                 cancellation.cancel();
                 debug!("Sending cancellation token for Listener");
-                Box::pin(async {}.into_actor(self).map(move |_result, _me, _ctx| {
-                    return Ok(());
-                }))
+                Box::pin(
+                    async {}
+                        .into_actor(self)
+                        .map(move |_result, _me, _ctx| Ok(())),
+                )
             }
             _ => Box::pin(
                 async {
                     debug!("Default do nothing");
                 }
                 .into_actor(self)
-                .map(move |_result, _me, _ctx| {
-                    return Ok(());
-                }),
+                .map(move |_result, _me, _ctx| Ok(())),
             ),
         }
     }
@@ -86,7 +111,10 @@ async fn start_listening(
     to: String,
     cancel: CancellationToken,
     store: Addr<StoreActor>,
-    internal_listener: NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>,
+    internal_listener: NodeListener<
+        ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
+        StoreGlue,
+    >,
 ) -> anyhow::Result<()> {
     let listener = TcpListener::bind(&to).await?;
     let mut connected = vec![];
@@ -100,7 +128,7 @@ async fn start_listening(
                 info!(format!("New connection for {}", addr));
                 let (actor, task) = Communication::new(stream, store.clone(), internal_listener.clone());
                 let new = actor.start();
-                let _ = new.do_send(ListenerState::Start);
+                new.do_send(ListenerState::Start);
                 tasks.push(task);
                 connected.push(new);
             }
@@ -108,14 +136,14 @@ async fn start_listening(
             _ = cancel.cancelled() => {
                 info!("Got order to take down the TCP stream. Sending message to shutdown all child TCP streams");
                 for con in connected{
-                    let _ = con.do_send(ListenerState::Shutdown);
+                    con.do_send(ListenerState::Shutdown);
                 }
                 break 'accept;
             }
         }
     }
 
-    let _ = futures::future::join_all(tasks);
+    let _ = futures::future::join_all(tasks).await;
 
     Ok(())
 }

@@ -40,9 +40,9 @@ impl FromStr for Order {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let splitted: Vec<&str> = s.trim().split(",").collect();
+        let splitted: Vec<&str> = s.trim().split(',').collect();
         let product_id = splitted
-            .get(0)
+            .first()
             .ok_or(anyhow!(
                 "An order must be an ID and a QTY in the format <id: u64>,<qty: u64>"
             ))?

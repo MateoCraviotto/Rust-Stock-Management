@@ -48,99 +48,6 @@ impl StoreInformation {
     }
 }
 
-// pub struct Store {
-//     //id: String,
-//     products: HashMap<u64, u64>,
-//     listener: Option<Addr<Listener>>,
-// }
-
-// impl Store {
-//     pub fn new() -> Self {
-//         Store {
-//             products: HashMap::new(),
-//             listener: None,
-//         }
-//     }
-
-//     pub fn get_products(&self) -> HashMap<u64, u64> {
-//         self.products.clone()
-//     }
-
-//     pub fn get_product_quantity(&self, product: u64) -> u64 {
-//         match self.products.get(&product) {
-//             Some(qty) => *qty,
-//             None => {
-//                 error!(format!("Product {} not found", product));
-//                 0
-//             }
-//         }
-//     }
-
-//     pub fn listener(&self) -> Option<Addr<Listener>> {
-//         match &self.listener {
-//             Some(addr) => Some(addr.clone()),
-//             None => {
-//                 error!("The store is disconnected");
-//                 None
-//             }
-//         }
-//     }
-
-//     pub fn add_to_network(&mut self, listener: Addr<Listener>) {
-//         self.listener = Some(listener);
-//     }
-
-//     pub fn add_product_stock(&mut self, id: u64, quantity: u64) -> u64 {
-//         if !self.products.contains_key(&id) {
-//             self.products.insert(id, quantity);
-//         } else {
-//             let current_amount = self.products[&id];
-//             self.products.insert(id, current_amount + quantity);
-//         }
-//         self.products[&id]
-//     }
-
-//     pub fn sell_product(&mut self, id: u64, quantity: u64) {
-//         let mut remainder = self.products[&id];
-//         if remainder >= quantity {
-//             remainder -= quantity;
-//             self.products.insert(id, remainder);
-//             info!(format!("Selling {} of product {}", quantity, id));
-//         } else {
-//             error!("Not enough products to sell");
-//         }
-//     }
-
-//     /// Manages incoming order
-//     pub fn manage_order(&mut self, order: Order) -> PurchaseState {
-//         let id = order.get_product();
-//         let qty = order.get_qty();
-//         println!("Current products: {:?}", self.get_products());
-//         if self.products.contains_key(&id) {
-//             let current_quantity = self.products[&id];
-//             if current_quantity >= qty {
-//                 self.sell_product(id, qty);
-//                 PurchaseState::Reserve
-//             } else {
-//                 PurchaseState::Cancel
-//             }
-//         } else {
-//             PurchaseState::Cancel
-//         }
-//     }
-
-//     pub fn clone(&self) -> Self {
-//         Store {
-//             //id: self.id.clone(),
-//             products: self.products.clone(),
-//             listener: match self.listener {
-//                 Some(ref addr) => Some(addr.clone()),
-//                 None => None,
-//             },
-//         }
-//     }
-// }
-
 pub struct StoreActor {
     stores: HashMap<StoreID, StoreInformation>,
     self_id: StoreID,
@@ -165,7 +72,7 @@ impl StoreActor {
 
         info.is_online(true);
 
-        return info;
+        info
     }
 }
 
@@ -206,7 +113,7 @@ impl Handler<StoreMessage> for StoreActor {
                     }
                 }
 
-                return None;
+                None
             }
             StoreMessage {
                 message_type: MessageType::Request,
@@ -237,7 +144,8 @@ impl Handler<StoreMessage> for StoreActor {
                             if self_info.stock.contains_key(&product) {
                                 let current_qty = self_info.stock[&product];
                                 if qty > current_qty {
-                                    if current_qty != 0 { // Use all I have
+                                    if current_qty != 0 {
+                                        // Use all I have
                                         local_stock.insert(product, current_qty);
                                         self_info.stock.insert(product, 0);
                                     }
@@ -258,13 +166,16 @@ impl Handler<StoreMessage> for StoreActor {
                         debug!(format!("Remote stock {:?}", remote_stock.clone()));
                         // Check other nodes for remaining stock in remote_stock
                         // If there is enough stock, reserve it and add it to involved_stock
-                        if remote_stock.len() > 0 {
+                        if remote_stock.is_empty() {
                             for store_id in stores_clone.keys() {
                                 if store_id != &self.self_id {
                                     let store_info = self.stores.get(store_id).cloned();
                                     match store_info {
                                         Some(mut store_info) => {
-                                            println!("Store {} has stock {:?}", store_id, store_info.stock);
+                                            println!(
+                                                "Store {} has stock {:?}",
+                                                store_id, store_info.stock
+                                            );
                                             let mut store_stock = Stock::new();
                                             let mut remote_stock = remote_stock.clone();
                                             for (product, qty) in remote_stock.clone() {
@@ -289,32 +200,30 @@ impl Handler<StoreMessage> for StoreActor {
                                 }
                             }
                         }
-                        
+
                         let mut rng = rand::thread_rng(); // Change this
                         let id: RequestID = rng.gen();
 
                         // If there is still stock in remote_stock, cancel the transaction
-                        if remote_stock.len() > 0 {
+                        if remote_stock.is_empty() {
                             return Some(Transaction {
                                 id,
                                 state: TransactionState::Cancelled,
-                                involved_stock: involved_stock,
+                                involved_stock,
                             });
                         }
 
                         let transaction: Transaction = Transaction {
                             id: new_transaction_id,
                             state: TransactionState::AwaitingConfirmation,
-                            involved_stock: involved_stock,
+                            involved_stock,
                         };
                         self_info.transactions.insert(id, transaction.clone());
                         self.stores.insert(self.self_id, self_info);
 
                         Some(transaction)
                     }
-                    None => {
-                        return None;
-                    }
+                    None => None,
                 }
             }
             StoreMessage {
@@ -339,9 +248,7 @@ impl Handler<StoreMessage> for StoreActor {
                             .insert(request_id, transaction.clone());
                         Some(transaction)
                     }
-                    None => {
-                        return None;
-                    }
+                    None => None,
                 }
             }
 
@@ -447,11 +354,11 @@ impl Handler<StoreMessage> for StoreActor {
 
                 println!("Updated stock: {:?}", self.stores[&self.self_id].stock);
 
-                return Some(Transaction {
+                Some(Transaction {
                     id: 0,
                     state: TransactionState::Finalized,
-                    involved_stock: involved_stock,
-                });
+                    involved_stock,
+                })
             }
             StoreMessage {
                 message_type: MessageType::AddStock,

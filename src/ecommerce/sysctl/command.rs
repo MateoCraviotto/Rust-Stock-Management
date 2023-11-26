@@ -18,7 +18,7 @@ impl FromStr for Command {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let clean = s.trim_start();
-        let first = clean.as_bytes().get(0).ok_or(anyhow!(
+        let first = clean.as_bytes().first().ok_or(anyhow!(
             "The command must be at least 1 ASCII character long with"
         ))?;
         let second = clean.as_bytes().get(1).unwrap_or(&b' ');

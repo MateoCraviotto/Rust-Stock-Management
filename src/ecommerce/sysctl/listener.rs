@@ -62,7 +62,7 @@ pub async fn listen_commands(
                     }
                     Command::NetDown => {
                         info!("Network Down order was given");
-                        let _ = net.do_send(ListenerState::Down);
+                        net.do_send(ListenerState::Down);
                         // Await all current messages to have a 'clean' environment
                         // in next iteration. Will block until all disconnections happened
                         let _ = futures::future::join_all(t).await;
@@ -76,7 +76,7 @@ pub async fn listen_commands(
                     }
                     Command::Sell(o) => {
                         info!(format!("New order was issued: {:?}", o));
-                        let _ = store.do_send(StoreMessage {
+                        store.do_send(StoreMessage {
                             message_type: MessageType::LocalRequest,
                             new_stock: None,
                             transactions: None,
@@ -86,7 +86,7 @@ pub async fn listen_commands(
                     Command::SellFromFile(f) => {
                         info!(format!("New orders were issued. Info in: {:?}", f));
                         let orders = read_orders(f).await?;
-                        let _ = store.do_send(StoreMessage {
+                        store.do_send(StoreMessage {
                             message_type: MessageType::LocalRequest,
                             new_stock: None,
                             transactions: None,
@@ -97,7 +97,7 @@ pub async fn listen_commands(
                         info!(format!("Adding new stock: {:?}", o));
                         let mut stock_to_add = Stock::new();
                         stock_to_add.insert(o.get_product(), o.get_qty());
-                        let _ = store.do_send(StoreMessage {
+                        store.do_send(StoreMessage {
                             message_type: MessageType::AddStock,
                             new_stock: Some(stock_to_add),
                             transactions: None,

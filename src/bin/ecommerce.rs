@@ -68,11 +68,7 @@ async fn manage_purchase(
     println!("Sent order {:?} to store.", order.to_string());
 
     let answer = read_socket(store.clone()).await?;
-    println!(
-        "Store answered {} to order {:?}",
-        answer,
-        order
-    );
+    println!("Store answered {} to order {:?}", answer, order);
 
     let answer_state = PurchaseState::from_str(&answer)?;
 
@@ -88,7 +84,11 @@ async fn manage_purchase(
 
             match confirmation_state {
                 PurchaseState::Commit(id) => {
-                    println!("Purchase with id {} and order {:?} confirmed", id, order.to_string());
+                    println!(
+                        "Purchase with id {} and order {:?} confirmed",
+                        id,
+                        order.to_string()
+                    );
                     Ok(confirmation_state)
                 }
                 _ => {
@@ -101,11 +101,19 @@ async fn manage_purchase(
             }
         }
         PurchaseState::Cancel(id) => {
-            println!("The order {:?} with id {} was cancelled", order.to_string(), id); // check this
+            println!(
+                "The order {:?} with id {} was cancelled",
+                order.to_string(),
+                id
+            ); // check this
             Ok(PurchaseState::Cancel(id))
-        },
+        }
         PurchaseState::Commit(id) => {
-            println!("The order {:?} with id {} has been committed. Purchase was completed successfully", order.to_string(), id); // check this
+            println!(
+                "The order {:?} with id {} has been committed. Purchase was completed successfully",
+                order.to_string(),
+                id
+            ); // check this
             Ok(PurchaseState::Commit(id))
         }
     }
