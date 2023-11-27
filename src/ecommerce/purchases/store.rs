@@ -10,7 +10,7 @@ use super::messages::{MessageType, RequestID, StoreID, StoreMessage, StoreState}
 
 pub type Stock = HashMap<u64, u64>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct StoreInformation {
     pub stock: Stock,
     pub transactions: HashMap<RequestID, Transaction>,

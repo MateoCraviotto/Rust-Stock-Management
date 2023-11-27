@@ -27,6 +27,7 @@ type CorrelationID = u64;
 
 #[derive(Serialize, Deserialize, Debug)]
 enum MessageType {
+    Hello,
     Request,
     Response,
     Error,
@@ -38,7 +39,7 @@ pub struct InterNodeMessage<T> {
     from: NodeID,
     correlation_id: Option<CorrelationID>,
     message_type: MessageType,
-    body: T,
+    body: Option<T>,
 }
 pub enum PeerMessage {
     PeerUp(NodeID, OwnedWriteHalf),
@@ -141,7 +142,7 @@ where
             from: self.me,
             correlation_id: Some(correlation_id),
             message_type: MessageType::Request,
-            body: msg,
+            body: Some(msg),
         };
         self.send(node, with_header).await?;
 
@@ -156,7 +157,7 @@ where
             from: self.me,
             correlation_id,
             message_type: MessageType::Request,
-            body: msg,
+            body: Some(msg),
         };
         self.send(node, with_header).await
     }
@@ -167,7 +168,7 @@ where
             from: self.me,
             correlation_id,
             message_type: MessageType::Request,
-            body: msg,
+            body: Some(msg),
         };
         let bytes = &serde_json::to_vec(&with_header)?;
         let keys: Vec<NodeID> = {
@@ -294,7 +295,7 @@ impl PeerComunication {
         <T as actix::Message>::Result: std::marker::Send,
     {
         let (mut read, write) = stream.into_split();
-        let mut writer_sent = Some(write);
+        let mut writer_sent = Some(Self::hello::<T>(write, me).await);
         let mut id = None;
 
         loop {
@@ -318,7 +319,8 @@ impl PeerComunication {
 
                             match (t, correlation) {
                                 (MessageType::Request, corr) => {
-                                        match actor.send(protocol_message.body).await{
+                                    if let Some(body) = protocol_message.body{
+                                        match actor.send(body).await{
                                             Ok(Ok(a)) => {
                                                 match a{
                                                     ProtocolEvent::MaybeNew => {
@@ -333,7 +335,7 @@ impl PeerComunication {
                                                             from: me,
                                                             correlation_id: corr,
                                                             message_type: MessageType::Response,
-                                                            body: response
+                                                            body: Some(response)
                                                         }).await;
                                                     }
                                                     ProtocolEvent::Teardown => {
@@ -346,26 +348,34 @@ impl PeerComunication {
                                                 from: me,
                                                 correlation_id: None,
                                                 message_type: MessageType::Error,
-                                                body: format!("{:?}", e)
+                                                body: Some(format!("{:?}", e))
                                             }).await,
                                             Err(_) => Self::send_back(&tx, from_id, InterNodeMessage {
                                                 from: me,
                                                 correlation_id: None,
                                                 message_type: MessageType::Error,
-                                                body: "Server error"
+                                                body: Some("Server error")
                                             }).await,
                                         };
+                                    }
                                 },
                                 (MessageType::Response | MessageType::Error, Some(corr_id)) => {
                                     let mut responses = response_bus.lock().await;
                                     let notif = Notify::new();
                                     notif.notify_one();
-                                    if let Some((old_notif, _)) = responses.insert(corr_id, (notif, Some(protocol_message.body))){
+                                    if let Some((old_notif, _)) = responses.insert(corr_id, (notif, protocol_message.body)){
                                         old_notif.notify_one()
                                     }
                                 },
                                 (MessageType::Response | MessageType::Error, None) => {
                                     error!(format!("There was a response with no correlation ID. Ignoring it {:?}", &protocol_message))
+                                },
+                                (MessageType::Hello, _) => {
+                                    if let Some(writer) = writer_sent{
+                                        let _ = tx.send(PeerMessage::PeerUp(from_id, writer)).await;
+                                        id = Some(from_id);
+                                        writer_sent = None;
+                                    }
                                 }
                             }
                         }
@@ -400,5 +410,18 @@ impl PeerComunication {
         if let Ok(s) = serde_json::to_vec(&msg) {
             let _ = tx.send(PeerMessage::PeerResponse(to, s)).await;
         }
+    }
+
+    async fn hello<T: Debug + Serialize + DeserializeOwned + 'static>(mut writer: OwnedWriteHalf, me: NodeID) -> OwnedWriteHalf {
+        let hello_msg: InterNodeMessage<T> = InterNodeMessage{
+            from: me,
+            correlation_id: None,
+            message_type: MessageType::Hello,
+            body: None
+        };
+        if let Ok(msg) = serde_json::to_vec(&hello_msg){
+            let _ = writer.write_all(&msg).await;
+        }
+        writer
     }
 }

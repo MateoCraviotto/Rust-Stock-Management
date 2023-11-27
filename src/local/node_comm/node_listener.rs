@@ -208,7 +208,7 @@ where
     pub async fn broadcast(&self, msg: T) -> anyhow::Result<Vec<anyhow::Result<()>>> {
         match &self.node_comm {
             Some(comm) => comm.broadcast(msg).await,
-            None => bail!("Message listener is not running"),
+            None => {bail!("Message listener is not running")},
         }
     }
 }
