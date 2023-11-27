@@ -37,6 +37,9 @@ pub async fn listen_commands(
     println!("Reading commands from STDIN");
 
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
+    let cancel = CancellationToken::new();
+    let updater = setup_updater(cancel.clone(), int_net.clone(), store.clone());
+
     // Save all the times that we tell the network to go up so we wait on all of them.
     // All of them should finish at the same time because of the cancellation tokens
     let mut t = vec![];
@@ -113,9 +116,12 @@ pub async fn listen_commands(
                 }
             }
         }
-    }
+    }  
+
+    cancel.clone();
 
     let _ = futures::future::join_all(t).await;
+    let _ = updater.await;
     Ok(())
 }
 
@@ -153,7 +159,7 @@ fn setup_updater(
     finish: CancellationToken,
     int_net: NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreGlue>,
     store: Addr<StoreActor>,
-) {
+) -> JoinHandle<anyhow::Result<()>>{
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -173,7 +179,9 @@ fn setup_updater(
                 }
             }
         }
-    });
+
+        Ok(())
+    })
 }
 
 fn transform_info(
