@@ -22,7 +22,7 @@ use crate::{
     local::{
         node_comm::node_listener::NodeListener,
         protocol::{
-            messages::ProtocolMessage,
+            messages::{ProtocolMessage, ProtocolMessageType},
             store_glue::{AbsoluteStateUpdate, StoreGlue},
         },
         NodeID,
@@ -118,7 +118,7 @@ pub async fn listen_commands(
         }
     }  
 
-    cancel.clone();
+    let _ = cancel.clone();
 
     let _ = futures::future::join_all(t).await;
     let _ = updater.await;
@@ -188,5 +188,17 @@ fn transform_info(
     id: NodeID,
     info: StoreInformation,
 ) -> ProtocolMessage<Stock, AbsoluteStateUpdate> {
-    todo!()
+    let message_type = ProtocolMessageType::Update;
+    let stock_update = info.stock;
+    let transaction_update = info.transactions.into_values().collect();
+
+    ProtocolMessage { 
+        from: id, 
+        message_type, 
+        request_information: None, 
+        update_information: Some(AbsoluteStateUpdate { 
+            stock_update: Some(stock_update), 
+            transaction_update: Some(transaction_update)
+        }) 
+    }
 }

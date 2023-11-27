@@ -12,8 +12,8 @@ pub type Stock = HashMap<u64, u64>;
 
 #[derive(Clone)]
 pub struct StoreInformation {
-    stock: Stock,
-    transactions: HashMap<RequestID, Transaction>,
+    pub stock: Stock,
+    pub transactions: HashMap<RequestID, Transaction>,
     is_online: bool,
 }
 
