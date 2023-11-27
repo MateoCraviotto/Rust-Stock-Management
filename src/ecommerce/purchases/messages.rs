@@ -1,4 +1,5 @@
 use crate::common::order::Order;
+use crate::ecommerce::purchases::store::StoreInformation;
 use actix::Message;
 use anyhow::bail;
 use std::{collections::HashMap, str::FromStr};
@@ -48,4 +49,10 @@ pub struct StoreMessage {
     pub new_stock: Option<Stock>,
     pub transactions: Option<HashMap<RequestID, Transaction>>,
     pub orders: Option<Vec<Order>>,
+}
+
+#[derive(Message)]
+#[rtype(result = "Option<(StoreID,StoreInformation)>")]
+pub enum StoreState {
+    CurrentState,
 }

@@ -54,8 +54,9 @@ async fn start(
 ) -> anyhow::Result<()> {
     let store = StoreActor::new(me).start();
     let store_glue = StoreGlue::new(me, store.clone()).start();
-    let internal_listener =
-        NodeListener::start(internal_port, ip, me, internal_port_list, store_glue);
+    let mut internal_listener =
+        NodeListener::new(internal_port, ip, me, internal_port_list, store_glue);
+    internal_listener.start();
     let listener =
         Listener::new(ip, external_port, store.clone(), internal_listener.clone()).start();
     listen_commands(listener, internal_listener, store).await

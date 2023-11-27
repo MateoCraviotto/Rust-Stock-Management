@@ -6,12 +6,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::debug;
 
-use super::messages::{MessageType, RequestID, StoreID, StoreMessage};
+use super::messages::{MessageType, RequestID, StoreID, StoreMessage, StoreState};
 
 pub type Stock = HashMap<u64, u64>;
 
 #[derive(Clone)]
-struct StoreInformation {
+pub struct StoreInformation {
     stock: Stock,
     transactions: HashMap<RequestID, Transaction>,
     is_online: bool,
@@ -470,5 +470,15 @@ impl Handler<StoreMessage> for StoreActor {
                 Some(transaction)
             }
         }
+    }
+}
+
+impl Handler<StoreState> for StoreActor {
+    type Result = Option<(StoreID, StoreInformation)>;
+
+    fn handle(&mut self, _msg: StoreState, _ctx: &mut Self::Context) -> Self::Result {
+        self.stores
+            .get(&self.self_id)
+            .and_then(|info| Some((self.self_id, info.clone())))
     }
 }

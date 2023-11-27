@@ -1,18 +1,20 @@
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 use actix::Addr;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
+    select,
     task::JoinHandle,
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     common::order::read_orders,
     ecommerce::{
         network::{listen::Listener, ListenerState},
         purchases::{
-            messages::{MessageType, StoreMessage},
-            store::{Stock, StoreActor},
+            messages::{MessageType, StoreMessage, StoreState},
+            store::{Stock, StoreActor, StoreInformation},
         },
         sysctl::command::Command,
     },
@@ -23,6 +25,7 @@ use crate::{
             messages::ProtocolMessage,
             store_glue::{AbsoluteStateUpdate, StoreGlue},
         },
+        NodeID,
     },
 };
 
@@ -34,7 +37,6 @@ pub async fn listen_commands(
     println!("Reading commands from STDIN");
 
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
-
     // Save all the times that we tell the network to go up so we wait on all of them.
     // All of them should finish at the same time because of the cancellation tokens
     let mut t = vec![];
@@ -56,7 +58,7 @@ pub async fn listen_commands(
                         info!("Network Up order was given");
                         t.push(start_listener(net.clone()));
                         if !int_net.is_running().await {
-                            int_net = int_net.restart().await;
+                            int_net.restart().await;
                         }
                         println!("Network was connected");
                     }
@@ -69,7 +71,7 @@ pub async fn listen_commands(
                         t = vec![];
 
                         if int_net.is_running().await {
-                            int_net = int_net.shutdown().await;
+                            int_net.shutdown().await;
                         }
 
                         println!("Network was disconnected");
@@ -145,4 +147,38 @@ fn print_commands() {
     println!("\t O | o <product_id>,<quantity> For giving a new order to the system");
     println!("\t F | f <FilePath> For giving a new set of orders to the system. It will read the orders from the given filepath");
     println!("\t A | a <product_id>,<quantity> For adding stock to the system");
+}
+
+fn setup_updater(
+    finish: CancellationToken,
+    int_net: NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreGlue>,
+    store: Addr<StoreActor>,
+) {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            select! {
+                res = store.send(StoreState::CurrentState) => {
+                    match res {
+                        Ok(Some((id, info))) => {
+                            let msg = transform_info(id,info);
+                            let _ = int_net.broadcast(msg).await;
+                        },
+                        _ => todo!(),
+                    }
+                }
+
+                _ = finish.cancelled() => {
+                    break;
+                }
+            }
+        }
+    });
+}
+
+fn transform_info(
+    id: NodeID,
+    info: StoreInformation,
+) -> ProtocolMessage<Stock, AbsoluteStateUpdate> {
+    todo!()
 }

@@ -2,6 +2,7 @@ use crate::local::protocol::store_glue::ProtocolStoreMessage;
 use actix::dev::ToEnvelope;
 use actix::{Actor, Addr, Message, ResponseActFuture};
 use anyhow::{anyhow, bail};
+use rand::Rng;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt::Debug;
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -62,6 +63,7 @@ impl<
         T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
             + Debug
             + Send
+            + Sync
             + Serialize
             + DeserializeOwned
             + 'static,
@@ -134,7 +136,7 @@ where
     }
 
     pub async fn commmunicate(&self, node: NodeID, msg: T) -> anyhow::Result<T> {
-        let correlation_id = Self::generate_correlation_id();
+        let correlation_id = self.generate_correlation_id();
         let with_header = InterNodeMessage {
             from: self.me,
             correlation_id: Some(correlation_id),
@@ -157,6 +159,28 @@ where
             body: msg,
         };
         self.send(node, with_header).await
+    }
+
+    pub async fn broadcast(&self, msg: T) -> anyhow::Result<Vec<anyhow::Result<()>>> {
+        let correlation_id = None;
+        let with_header = InterNodeMessage {
+            from: self.me,
+            correlation_id,
+            message_type: MessageType::Request,
+            body: msg,
+        };
+        let bytes = &serde_json::to_vec(&with_header)?;
+        let keys: Vec<NodeID> = {
+            let lock = self.responses.lock().await;
+            let r = lock.keys().copied().collect();
+            drop(lock);
+            r
+        };
+
+        Ok(
+            futures::future::join_all(keys.into_iter().map(|key| self.send_bytes(key, &bytes)))
+                .await,
+        )
     }
 
     async fn send(&self, node: NodeID, msg: InterNodeMessage<T>) -> anyhow::Result<()> {
@@ -212,8 +236,8 @@ where
         Ok(response)
     }
 
-    fn generate_correlation_id() -> CorrelationID {
-        1
+    fn generate_correlation_id(&self) -> CorrelationID {
+        rand::thread_rng().gen::<CorrelationID>() >> 32 & ((self.me >> 32) << 32)
     }
 }
 
@@ -226,6 +250,7 @@ impl PeerComunication {
         T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
             + Debug
             + Send
+            + Sync
             + Serialize
             + DeserializeOwned
             + 'static,
@@ -251,6 +276,7 @@ impl PeerComunication {
         T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
             + Debug
             + Send
+            + Sync
             + Serialize
             + DeserializeOwned
             + 'static,

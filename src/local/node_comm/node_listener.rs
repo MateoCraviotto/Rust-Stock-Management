@@ -43,6 +43,7 @@ impl<
         T: Message<Result = anyhow::Result<ProtocolEvent<T>>>
             + Debug
             + Send
+            + Sync
             + Serialize
             + DeserializeOwned
             + 'static,
@@ -52,48 +53,52 @@ where
     <A as Actor>::Context: ToEnvelope<A, T>,
     <T as actix::Message>::Result: std::marker::Send,
 {
-    pub fn start(
+    pub fn new(
         port: u16,
         ip: Ipv4Addr,
         me: NodeID,
         initial_list: Vec<u16>,
         operator: Addr<A>,
     ) -> Self {
-        let cancel = CancellationToken::new();
-        let child_token = cancel.child_token();
-        let grand_child_token = child_token.child_token();
-        let node_comm = NodeCommunication::start(grand_child_token, me, operator.clone());
-        let handle = tokio::spawn(Self::run(
-            port,
-            ip,
-            child_token,
-            initial_list.clone(),
-            node_comm.clone(),
-        ));
-
         Self {
+            me,
             port,
             ip,
             initial_list,
             operator,
-            cancel: Some(cancel),
-            task_handle: Some(Arc::new(Mutex::new(handle))),
-            node_comm: Some(node_comm),
-            me,
+
+            cancel: None,
+            task_handle: None,
+            node_comm: None,
         }
     }
 
-    pub async fn restart(self) -> Self {
-        if let Some(handle) = self.task_handle {
-            let _ = handle.as_ref().lock().await;
-        }
-        Self::start(
+    pub fn start(&mut self) {
+        let cancel = CancellationToken::new();
+        let child_token = cancel.child_token();
+        let grand_child_token = child_token.child_token();
+        let node_comm = NodeCommunication::start(grand_child_token, self.me, self.operator.clone());
+        let handle = tokio::spawn(Self::run(
             self.port,
             self.ip,
-            self.me,
-            self.initial_list,
-            self.operator,
-        )
+            child_token,
+            self.initial_list.clone(),
+            node_comm.clone(),
+        ));
+
+        self.cancel = Some(cancel);
+        self.task_handle = Some(Arc::new(Mutex::new(handle)));
+        self.node_comm = Some(node_comm);
+    }
+
+    pub async fn restart(&mut self) {
+        if let Some(handle) = &self.task_handle {
+            let _ = handle.as_ref().lock().await;
+        }
+
+        self.cancel = None;
+        self.task_handle = None;
+        self.node_comm = None;
     }
 
     async fn run(
@@ -157,24 +162,18 @@ where
         Ok(node_comm.new_node(stream))
     }
 
-    pub async fn shutdown(self) -> Self {
+    pub async fn shutdown(&mut self) {
         info!("Shutting down the listening for new nodes");
-        if let Some(cancel) = self.cancel {
+        if let Some(cancel) = &self.cancel {
             cancel.cancel();
         }
-        if let Some(task) = self.task_handle {
+        if let Some(task) = &self.task_handle {
             let _ = task.as_ref().lock().await;
         }
-        Self {
-            me: self.me,
-            port: self.port,
-            ip: self.ip,
-            initial_list: self.initial_list,
-            operator: self.operator,
-            cancel: None,
-            task_handle: None,
-            node_comm: None,
-        }
+
+        self.cancel = None;
+        self.task_handle = None;
+        self.node_comm = None;
     }
 
     pub async fn is_running(&self) -> bool {
@@ -202,6 +201,13 @@ where
         debug!(format!("Sending a message to {}. Message: {:?}", node, msg));
         match &self.node_comm {
             Some(comm) => comm.send_message(node, msg).await,
+            None => bail!("Message listener is not running"),
+        }
+    }
+
+    pub async fn broadcast(&self, msg: T) -> anyhow::Result<Vec<anyhow::Result<()>>> {
+        match &self.node_comm {
+            Some(comm) => comm.broadcast(msg).await,
             None => bail!("Message listener is not running"),
         }
     }
