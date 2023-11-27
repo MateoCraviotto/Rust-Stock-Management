@@ -69,3 +69,34 @@ De la misma manera ocurre en las conexiones de los nodos. La diferencia radica e
 Toda la logica de modificacion de tiendas esta en manos de un actor. Este se encargara de armar los planes de pedidos, actualizar informacion de otras tiendas y todas las otras operaciones anteriormente nombradas.
 
 La informacion de cada nodo se actualiza de forma periodica, para que las transacciones locales no desactualizen demasiado el estado de la red. Esta periodicidad puede basarse en diferentes metricas, pero en este caso simplemente se basa en tiempo que paso desde la anterior actualizacion. 
+
+
+## Ejecución
+
+### Locales
+
+Para ejecutar un local o tienda (store) se utiliza el siguiente comando:
+
+`cargo run --bin local -- --port-intern 12345 --extern-port 12312 --store-id 1 --node-ports 12346;12347 --ip 127.0.0.1`
+
+- `port-intern` determina el puerto utilizado por este local para la red interna de tiendas/stores
+- `extern-port` determina el puerto utilizado por este local para la comunicación con los ecommerce
+- `store-id` es el identificador de la tienda que estamos ejecutando. Dene ser un entero no signado u64 que no hayamos asignado a otra tienda.
+- `node-ports` determina los puertos internos de los otros nodos (tiendas) que vayamos a ejecutar, separados por punto y coma (;)
+- `ip` es la dirección IP a la que se vincula el listener que escucha conexiones de los ecommerce. El valor por defecto es `127.0.0.1`
+
+Lógicamente, los valores de estos parámetros se colocan a preferencia del usuario.
+
+### Ecommerces
+
+Para ejecutar un ecommerce se utiliza el siguiente comando:
+
+`cargo run --bin ecommerce -- --ports 12312;12313 --ip 127.0.0.1`
+
+- `ports` son los puertos externos de las tiendas a las que se conecta el ecommerce
+- `ip` es la dirección IP de las tiendas a las que se conecta el ecommerce
+
+
+### Log level
+
+Además, a ambos comandos se puede agregar el parámetro `--verbosity` que tiene las opciones *info*, *warning*, *error* o *debug* para establecer el nivel de loggeo de esa terminal. El valor por defecto es *debug*.
