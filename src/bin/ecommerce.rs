@@ -10,7 +10,7 @@ use tp::{
         network::connection::{read_socket, write_socket},
         purchases::purchase_state::PurchaseState,
     },
-    log_level,
+    log_level, error,
 };
 
 #[actix_rt::main]
@@ -18,6 +18,8 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let mut ports = args.ports;
     log_level!(args.verbosity);
+
+    let mut orders = read_orders(args.file.clone()).await?;
 
     while !ports.is_empty() {
         let store_port = match get_closest_store(ports.clone()) {
@@ -43,35 +45,43 @@ async fn main() -> anyhow::Result<()> {
             }
         };
         let client = Arc::new(Mutex::new(connection));
-        let orders = read_orders(args.file.clone()).await?;
         let mut tasks = vec![];
         for order in orders.into_iter() {
-            let order_clone = order.clone(); // clone order to send to store
             let client_clone = client.clone();
             // Create tokio task for each order
-            let t: tokio::task::JoinHandle<()> = tokio::spawn(async move {
-                match manage_purchase(order_clone, client_clone).await {
+            let t: tokio::task::JoinHandle<Result<(), Order>> = tokio::spawn(async move {
+                match manage_purchase(order, client_clone).await {
                     Ok(state) => {
                         println!("Purchase state: {:?}", state.to_string());
                         match state {
                             PurchaseState::Commit(id) => {
                                 println!("Purchase completed. Id: {}", id);
+                                return Ok(())
                             }
                             _ => {
                                 println!("Purchase cancelled.");
+                                return Ok(())
                             }
                         }
                     }
                     Err(e) => {
-                        println!("Error while managing purchase: {}", e);
+                        error!(format!("There was an error while managing a purchase {:?}", e));
+                        return Err(order)
                     }
                 };
             });
             tasks.push(t);
-            //tokio::time::sleep(Duration::from_secs(2)).await;
         }
         
-        let _ = futures::future::join_all(tasks).await;
+        orders = futures::future::join_all(tasks).await
+        .into_iter()
+        .flat_map(|result|{
+            match result{
+                Ok(Err(o)) => Some(o),
+                _ => None
+            }
+        })
+        .collect();
         
     
     }
