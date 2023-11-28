@@ -20,7 +20,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::local::NodeID;
-use crate::{debug, error};
+use crate::{debug, error, info};
 
 use super::{ActorLifetime, ProtocolEvent};
 
@@ -90,7 +90,7 @@ where
             actor,
         });
 
-        let _ = tokio::spawn(Self::run(this.clone()));
+        tokio::spawn(Self::run(this.clone()));
 
         this
     }
@@ -119,6 +119,7 @@ where
                 }
 
                 _ = this.cancel.cancelled() => {
+                    info!("Cancelled peer information");
                     break;
                 }
             }
@@ -181,7 +182,7 @@ where
         };
 
         Ok(
-            futures::future::join_all(keys.into_iter().map(|key| self.send_bytes(key, &bytes)))
+            futures::future::join_all(keys.into_iter().map(|key| self.send_bytes(key, bytes)))
                 .await,
         )
     }
@@ -207,7 +208,7 @@ where
 
         select! {
             res = rx => {
-                return Ok(res?);
+                Ok(res?)
             }
 
             _ = tokio::time::sleep(Duration::from_secs(1)) => {
@@ -377,17 +378,14 @@ impl PeerComunication {
                 }
 
                 _ = cancel.cancelled() => {
-                    println!("CANCELLING :)");
+                    println!("Cancelled Peer Communication");
                     break;
                 }
             }
         }
-        println!("AAAAAAAAAAAAAAAAAaa");
         if let Some(from_id) = id {
-            println!("BBBBBBBBBBBB");
             actor.do_send(ActorLifetime::Shutdown(from_id));
             let _ = tx.send(PeerMessage::PeerDown(from_id)).await;
-            println!("CCCCCCCCCCCCCC");
         }
 
         Ok(())

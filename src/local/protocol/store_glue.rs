@@ -139,7 +139,6 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                     }
                     ProtocolMessageType::Request => {
                         if let Some((req_id, m)) = Self::transform_request(me, msg) {
-                            println!("Transformed request into: {:?}", m);
                             match m.message_type {
                                 MessageType::Ask(_) => {
                                     match store.send(m).await {

@@ -135,7 +135,7 @@ async fn serve(
                                 let mut purchase_cancelled = false;
                                 let me = {
                                     let internal_listener = arc_internal_listener.as_ref().lock().await;
-                                    let me_clone = internal_listener.me.clone();
+                                    let me_clone = internal_listener.me;
                                     drop(internal_listener);
                                     me_clone
                                 };
@@ -196,7 +196,6 @@ async fn serve(
                 }
                 match PurchaseState::from_str(&data) {
                     Ok(purchase_state) => {
-                        println!("purchase state OK: {:?}", purchase_state);
                         match purchase_state {
                             PurchaseState::Commit(id) => {
                                 println!("Purchase confirmed from ecommerce. Notifying all involved stores.");
@@ -227,12 +226,10 @@ async fn serve(
                                 }
                             },
                             _ => {
-                                println!("purchase state _: {:?}", purchase_state);
                             },
                         }
                     },
                     Err(_) => {
-                        println!("continue");
                         continue
                     }, // Do nothing
                 };
@@ -326,7 +323,6 @@ async fn notify_nodes(
             internal_listener
                 .send_message(store_id, node_request)
                 .await?;
-            println!("---------Notified store {}", store_id);
         }
     }
 

@@ -10,7 +10,7 @@ use tp::{
         network::connection::{read_socket, write_socket},
         purchases::purchase_state::PurchaseState,
     },
-    log_level, error,
+    error, log_level,
 };
 
 #[actix_rt::main]
@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut orders = read_orders(args.file.clone()).await?;
 
-    while !ports.is_empty() {
+    while !ports.is_empty() && !orders.is_empty() {
         let store_port = match get_closest_store(ports.clone()) {
             Some(port) => port,
             None => {
@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
         // Remove port from args.ports
         let index = ports.clone().iter().position(|&x| x == store_port).unwrap();
         ports.remove(index);
-        
+
         println!(
             "Running E-Commerce which will connect to {}:{}",
             args.ip, store_port
@@ -51,39 +51,36 @@ async fn main() -> anyhow::Result<()> {
             // Create tokio task for each order
             let t: tokio::task::JoinHandle<Result<(), Order>> = tokio::spawn(async move {
                 match manage_purchase(order, client_clone).await {
-                    Ok(state) => {
-                        println!("Purchase state: {:?}", state.to_string());
-                        match state {
-                            PurchaseState::Commit(id) => {
-                                println!("Purchase completed. Id: {}", id);
-                                return Ok(())
-                            }
-                            _ => {
-                                println!("Purchase cancelled.");
-                                return Ok(())
-                            }
+                    Ok(state) => match state {
+                        PurchaseState::Commit(id) => {
+                            println!("Purchase completed. Id: {}", id);
+                            return Ok(());
                         }
-                    }
+                        _ => {
+                            println!("Purchase cancelled.");
+                            return Ok(());
+                        }
+                    },
                     Err(e) => {
-                        error!(format!("There was an error while managing a purchase {:?}", e));
-                        return Err(order)
+                        error!(format!(
+                            "There was an error while managing a purchase {:?}",
+                            e
+                        ));
+                        return Err(order);
                     }
                 };
             });
             tasks.push(t);
         }
-        
-        orders = futures::future::join_all(tasks).await
-        .into_iter()
-        .flat_map(|result|{
-            match result{
+
+        orders = futures::future::join_all(tasks)
+            .await
+            .into_iter()
+            .flat_map(|result| match result {
                 Ok(Err(o)) => Some(o),
-                _ => None
-            }
-        })
-        .collect();
-        
-    
+                _ => None,
+            })
+            .collect();
     }
     Ok(())
 }
@@ -105,11 +102,8 @@ async fn manage_purchase(
         PurchaseState::Confirm(id) => {
             println!("Stock reserved");
             let msg = determine_commit_or_cancel(id);
-            println!("Voy a escribir {}", msg);
             write_socket(store.clone(), &msg).await?;
-            println!("------escribí");
             let answer = read_socket(store.clone()).await?;
-            println!("------leí");
             let confirmation_state = PurchaseState::from_str(&answer)?;
 
             match confirmation_state {
@@ -151,7 +145,7 @@ async fn manage_purchase(
 
 fn get_closest_store(ports: Vec<u16>) -> Option<u16> {
     // Get a random store port
-    let port = ports.choose(&mut rand::thread_rng()).map(|x| *x);
+    let port = ports.choose(&mut rand::thread_rng()).copied();
     port
 }
 

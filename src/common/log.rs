@@ -62,8 +62,8 @@ impl ValueEnum for Verbosity {
 #[macro_export]
 macro_rules! debug {
     ($text: expr) => {{
-        if crate::common::log::Verbosity::Debug as u8
-            >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
+        if $crate::common::log::Verbosity::Debug as u8
+            >= $crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
         {
             println!("DEBUG: {}", $text)
         }
@@ -73,8 +73,8 @@ macro_rules! debug {
 #[macro_export]
 macro_rules! info {
     ($text: expr) => {{
-        if crate::common::log::Verbosity::Info as u8
-            >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
+        if $crate::common::log::Verbosity::Info as u8
+            >= $crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
         {
             println!("INFO: {}", $text)
         }
@@ -84,8 +84,8 @@ macro_rules! info {
 #[macro_export]
 macro_rules! warn {
     ($text: expr) => {{
-        if crate::common::log::Verbosity::Warn as u8
-            >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
+        if $crate::common::log::Verbosity::Warn as u8
+            >= $crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
         {
             println!("WARN: {}", $text)
         }
@@ -95,8 +95,8 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! error {
     ($text: expr) => {{
-        if crate::common::log::Verbosity::Error as u8
-            >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
+        if $crate::common::log::Verbosity::Error as u8
+            >= $crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
         {
             println!("ERROR: {}", $text)
         }
@@ -106,8 +106,8 @@ macro_rules! error {
 #[macro_export]
 macro_rules! fatal {
     ($text: expr) => {{
-        if crate::common::log::Verbosity::Fatal as u8
-            >= crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
+        if $crate::common::log::Verbosity::Fatal as u8
+            >= $crate::VERBOSITY.load(std::sync::atomic::Ordering::Relaxed)
         {
             println!("FATAL: {}", $text)
         }

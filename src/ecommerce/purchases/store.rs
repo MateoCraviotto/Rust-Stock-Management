@@ -4,7 +4,7 @@ use actix::{Actor, Context, Handler};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::debug;
+use crate::{debug, info};
 
 use super::messages::{MessageType, RequestID, StoreID, StoreMessage, StoreState};
 
@@ -168,7 +168,6 @@ impl Handler<StoreMessage> for StoreActor {
 
                         debug!(format!("Local stock {:?}", local_stock.clone()));
                         debug!(format!("Remote stock {:?}", remote_stock.clone()));
-                        debug!(format!("Stores: {:?}", stores_clone.keys()));
 
                         let able_remote: Vec<u64> = self
                             .stores
@@ -190,7 +189,6 @@ impl Handler<StoreMessage> for StoreActor {
                         if !remote_stock.is_empty() {
                             for store_id in &able_remote {
                                 let store_info = self.stores.get(store_id).cloned();
-                                debug!(format!("Store info: {:?}", store_info));
                                 match store_info {
                                     Some(mut store_info) => {
                                         println!(
@@ -252,7 +250,6 @@ impl Handler<StoreMessage> for StoreActor {
                 orders: _,
             } => {
                 let self_info = self.stores.get_mut(&self.self_id)?;
-                println!("Transactions: {:?}", self_info.transactions);
                 let transaction = self_info.transactions.get(&request_id).cloned();
                 match transaction {
                     Some(mut transaction) => {
@@ -274,7 +271,6 @@ impl Handler<StoreMessage> for StoreActor {
             } => {
                 let stores_clone = self.stores.clone();
                 let mut self_info = stores_clone.get(&self.self_id).cloned()?;
-                println!("Transactions: {:?}", self_info.transactions);
                 let transaction = self_info.transactions.get(&request_id).cloned();
                 let mut transaction = match transaction {
                     Some(transaction) => transaction,
@@ -361,7 +357,10 @@ impl Handler<StoreMessage> for StoreActor {
                 let mut involved_stock: HashMap<u64, Stock> = HashMap::new();
                 involved_stock.insert(self.self_id, local_stock);
 
-                println!("Updated stock: {:?}", self.stores[&self.self_id].stock);
+                info!(format!(
+                    "Updated stock: {:?}",
+                    self.stores[&self.self_id].stock
+                ));
 
                 Some(Transaction {
                     id: 0,
@@ -391,7 +390,7 @@ impl Handler<StoreMessage> for StoreActor {
                         self_info.stock.insert(product, qty);
                     }
                 }
-                println!("Current stock: {:?}", self_info.stock);
+                info!(format!("Current stock: {:?}", self_info.stock));
                 self.stores.insert(self.self_id, self_info);
                 None
             }
@@ -446,7 +445,6 @@ impl Handler<StoreMessage> for StoreActor {
                     state: TransactionState::AwaitingConfirmation,
                     involved_stock: HashMap::new(),
                 };
-                // todo check if I should save the transaction with this local stock
                 if let Some(me) = self.stores.get_mut(&self.self_id) {
                     me.transactions.insert(request_id, transaction.clone());
                 }
@@ -493,7 +491,7 @@ impl Handler<StoreState> for StoreActor {
             StoreState::CurrentState => self
                 .stores
                 .get(&self.self_id)
-                .and_then(|info| Some((self.self_id, info.clone()))),
+                .map(|info| (self.self_id, info.clone())),
             StoreState::Shutdown(store_id) => self.stores.get_mut(&store_id).and_then(|store| {
                 store.is_online(false);
                 None

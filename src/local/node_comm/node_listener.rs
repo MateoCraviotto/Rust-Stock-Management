@@ -129,7 +129,6 @@ where
                     let (stream, addr) = conn_result?;
                     info!(format!("New node connection for {}", addr));
                     node_comms.push(node_comm.new_node(stream));
-                    println!("NODE COMMUNICATIONS: {:?}", node_comms);
                 }
 
                 _ = cancel.cancelled() => {
@@ -173,9 +172,7 @@ where
     pub async fn shutdown(&mut self) {
         info!("Shutting down the listening for new nodes");
         if let Some(cancel) = &self.cancel {
-            println!("cancelling (SHUTDOWN) {:?}", cancel);
             cancel.cancel();
-            println!("cancelled (SHUTDOWN) {:?}", cancel);
         }
         if let Some(task) = &self.task_handle {
             let _ = task.as_ref().lock().await;

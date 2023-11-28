@@ -64,7 +64,6 @@ pub async fn listen_commands(
                         if !int_net.is_running().await {
                             int_net.restart().await;
                         }
-                        println!("Network was connected");
                     }
                     Command::NetDown => {
                         info!("Network Down order was given");
@@ -120,7 +119,7 @@ pub async fn listen_commands(
         }
     }
 
-    let _ = cancel.cancel();
+    cancel.cancel();
 
     let _ = futures::future::join_all(t).await;
     let _ = updater.await;
@@ -174,12 +173,13 @@ fn setup_updater(
                             let _ = int_net.broadcast(msg).await;
                         },
                         _ => {
-                            println!("There was an error while getting the current state");
+                            error!("There was an error while getting the current state");
                         },
                     }
                 }
 
                 _ = finish.cancelled() => {
+                    info!("Cancelling updater");
                     break;
                 }
             }
