@@ -433,7 +433,9 @@ impl Handler<StoreMessage> for StoreActor {
                 // Update my stock
                 for order in orders.clone() {
                     let current_qty = self_info.stock[&order.get_product()];
-                    self_info.stock.insert(order.get_product(), current_qty - order.get_qty());
+                    self_info
+                        .stock
+                        .insert(order.get_product(), current_qty - order.get_qty());
                 }
                 self.stores.insert(self.self_id, self_info);
 

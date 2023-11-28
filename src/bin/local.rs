@@ -59,7 +59,12 @@ async fn start(
         NodeListener::new(internal_port, ip, me, internal_port_list, store_glue);
     internal_listener.start();
     let arc_internal_listener = Arc::new(Mutex::new(internal_listener));
-    let listener =
-        Listener::new(ip, external_port, store.clone(), arc_internal_listener.clone()).start();
+    let listener = Listener::new(
+        ip,
+        external_port,
+        store.clone(),
+        arc_internal_listener.clone(),
+    )
+    .start();
     listen_commands(listener, arc_internal_listener, store).await
 }

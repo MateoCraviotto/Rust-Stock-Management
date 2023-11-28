@@ -1,10 +1,11 @@
-use std::{str::FromStr, time::Duration, sync::Arc};
+use std::{str::FromStr, sync::Arc, time::Duration};
 
 use actix::Addr;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     select,
-    task::JoinHandle, sync::Mutex,
+    sync::Mutex,
+    task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -116,7 +117,7 @@ pub async fn listen_commands(
                 }
             }
         }
-    }  
+    }
 
     let _ = cancel.clone();
 
@@ -159,7 +160,7 @@ fn setup_updater(
     finish: CancellationToken,
     int_net: Arc<Mutex<NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreGlue>>>,
     store: Addr<StoreActor>,
-) -> JoinHandle<anyhow::Result<()>>{
+) -> JoinHandle<anyhow::Result<()>> {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_millis(1000)).await;
@@ -195,13 +196,13 @@ fn transform_info(
     let stock_update = info.stock;
     let transaction_update = info.transactions.into_values().collect();
 
-    ProtocolMessage { 
-        from: id, 
-        message_type, 
-        request_information: None, 
-        update_information: Some(AbsoluteStateUpdate { 
-            stock_update: Some(stock_update), 
-            transaction_update: Some(transaction_update)
-        }) 
+    ProtocolMessage {
+        from: id,
+        message_type,
+        request_information: None,
+        update_information: Some(AbsoluteStateUpdate {
+            stock_update: Some(stock_update),
+            transaction_update: Some(transaction_update),
+        }),
     }
 }

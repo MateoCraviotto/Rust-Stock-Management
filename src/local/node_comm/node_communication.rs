@@ -1,26 +1,26 @@
 use crate::local::protocol::store_glue::ProtocolStoreMessage;
 use actix::dev::ToEnvelope;
 use actix::{Actor, Addr, Message, ResponseActFuture};
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use rand::Rng;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use tokio::sync::oneshot;
 use std::fmt::Debug;
 use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::sync::oneshot;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{tcp::OwnedWriteHalf, TcpStream},
     select,
     sync::{
         mpsc::{self, Receiver, Sender},
-        Mutex, Notify,
+        Mutex,
     },
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::local::NodeID;
-use crate::{debug, error};
+use crate::error;
 
 use super::ProtocolEvent;
 
@@ -176,7 +176,7 @@ where
             drop(lock);
             r
         };
-        
+
         Ok(
             futures::future::join_all(keys.into_iter().map(|key| self.send_bytes(key, &bytes)))
                 .await,
@@ -394,14 +394,17 @@ impl PeerComunication {
         }
     }
 
-    async fn hello<T: Debug + Serialize + DeserializeOwned + 'static>(mut writer: OwnedWriteHalf, me: NodeID) -> OwnedWriteHalf {
-        let hello_msg: InterNodeMessage<T> = InterNodeMessage{
+    async fn hello<T: Debug + Serialize + DeserializeOwned + 'static>(
+        mut writer: OwnedWriteHalf,
+        me: NodeID,
+    ) -> OwnedWriteHalf {
+        let hello_msg: InterNodeMessage<T> = InterNodeMessage {
             from: me,
             correlation_id: None,
             message_type: MessageType::Hello,
-            body: None
+            body: None,
         };
-        if let Ok(msg) = serde_json::to_vec(&hello_msg){
+        if let Ok(msg) = serde_json::to_vec(&hello_msg) {
             let _ = writer.write_all(&msg).await;
         }
         writer

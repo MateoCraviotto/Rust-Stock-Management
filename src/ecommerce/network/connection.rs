@@ -40,9 +40,8 @@ impl Communication {
     pub fn new(
         stream: TcpStream,
         store: Addr<StoreActor>,
-        arc_internal_listener: Arc<Mutex<NodeListener<
-            ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-            StoreGlue>>,
+        arc_internal_listener: Arc<
+            Mutex<NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>>,
         >,
     ) -> (Self, JoinHandle<anyhow::Result<()>>) {
         let mine = CancellationToken::new();
@@ -89,9 +88,8 @@ async fn serve(
     stream: Arc<Mutex<TcpStream>>,
     token: CancellationToken,
     store: Addr<StoreActor>,
-    arc_internal_listener: Arc<Mutex<NodeListener<
-        ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-        StoreGlue>>,
+    arc_internal_listener: Arc<
+        Mutex<NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>>,
     >,
 ) -> anyhow::Result<()> {
     'serving: loop {
@@ -300,9 +298,8 @@ fn get_node_modifications_for(
 async fn notify_nodes(
     action: RequestAction,
     transaction: Transaction,
-    arc_internal_listener: Arc<Mutex<NodeListener<
-        ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-        StoreGlue>>,
+    arc_internal_listener: Arc<
+        Mutex<NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>>,
     >,
 ) -> anyhow::Result<()> {
     let internal_listener = arc_internal_listener.as_ref().lock().await;

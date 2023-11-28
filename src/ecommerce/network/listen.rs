@@ -25,8 +25,9 @@ pub struct Listener {
     ip: Ipv4Addr,
     cancel_token: CancellationToken,
     store: Addr<StoreActor>,
-    arc_internal_listener:
-    Arc<Mutex<NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>>>,
+    arc_internal_listener: Arc<
+        Mutex<NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>>,
+    >,
 }
 
 impl Listener {
@@ -34,9 +35,8 @@ impl Listener {
         ip: Ipv4Addr,
         port: u16,
         store: Addr<StoreActor>,
-        arc_internal_listener: Arc<Mutex<NodeListener<
-            ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-            StoreGlue>>,
+        arc_internal_listener: Arc<
+            Mutex<NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>>,
         >,
     ) -> Self {
         Listener {
@@ -111,9 +111,8 @@ async fn start_listening(
     to: String,
     cancel: CancellationToken,
     store: Addr<StoreActor>,
-    arc_internal_listener: Arc<Mutex<NodeListener<
-        ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-        StoreGlue>>,
+    arc_internal_listener: Arc<
+        Mutex<NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>>,
     >,
 ) -> anyhow::Result<()> {
     let listener = TcpListener::bind(&to).await?;
