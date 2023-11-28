@@ -4,6 +4,7 @@ use actix::{Actor, Addr, Message, ResponseActFuture};
 use anyhow::{anyhow, bail};
 use rand::Rng;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tokio::sync::oneshot;
 use std::fmt::Debug;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{
@@ -56,7 +57,7 @@ pub struct NodeCommunication<
     peer_task_rx: Mutex<Receiver<PeerMessage>>,
     peer_task_tx: Sender<PeerMessage>,
     peers_writer: Mutex<HashMap<NodeID, OwnedWriteHalf>>,
-    responses: Arc<Mutex<HashMap<CorrelationID, (Notify, Option<T>)>>>,
+    responses: Arc<Mutex<HashMap<CorrelationID, oneshot::Sender<T>>>>,
     actor: Addr<A>,
 }
 
@@ -198,42 +199,18 @@ where
     }
 
     async fn get_response(&self, correlation_id: CorrelationID) -> anyhow::Result<T> {
-        let mut map = self.responses.lock().await;
-        if map.get(&correlation_id).is_none() {
-            map.insert(correlation_id, (Notify::new(), None));
-        }
+        let (tx, rx) = oneshot::channel();
+        self.responses.lock().await.insert(correlation_id, tx);
 
-        let res = {
-            let mut timeout = false;
-            while map.get(&correlation_id).unwrap().1.is_none() {
-                select! {
-                    _ = map.get(&correlation_id).unwrap().0.notified() => {
-                        break;
-                    }
-
-                    _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                        // If this happens, it means that the connection is probably down
-                        // but this shouldn't be decided here, let the stream be the one to decide.
-                        timeout = true;
-                        break;
-                    }
-                }
+        select! {
+            res = rx => {
+                return Ok(res?);
             }
 
-            timeout
-        };
-
-        if res {
-            bail!("Timeout while waiting for a response")
+            _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                bail!("Timeout while waiting for a response")
+            }
         }
-
-        let response = map
-            .remove(&correlation_id)
-            .ok_or(anyhow!("Error while getting a supossedly existant value"))?
-            .1
-            .ok_or(anyhow!("Error while getting a supossedly existant value"))?;
-
-        Ok(response)
     }
 
     fn generate_correlation_id(&self) -> CorrelationID {
@@ -262,7 +239,7 @@ impl PeerComunication {
         cancel: CancellationToken,
         tx: Sender<PeerMessage>,
         actor: Addr<A>,
-        response_bus: Arc<Mutex<HashMap<CorrelationID, (Notify, Option<T>)>>>,
+        response_bus: Arc<Mutex<HashMap<CorrelationID, oneshot::Sender<T>>>>,
     ) -> Self
     where
         <A as Actor>::Context: ToEnvelope<A, T>,
@@ -288,7 +265,7 @@ impl PeerComunication {
         cancel: CancellationToken,
         tx: Sender<PeerMessage>,
         actor: Addr<A>,
-        response_bus: Arc<Mutex<HashMap<CorrelationID, (Notify, Option<T>)>>>,
+        response_bus: Arc<Mutex<HashMap<CorrelationID, oneshot::Sender<T>>>>,
     ) -> anyhow::Result<()>
     where
         <A as Actor>::Context: ToEnvelope<A, T>,
@@ -297,7 +274,6 @@ impl PeerComunication {
         let (mut read, write) = stream.into_split();
         let mut writer_sent = Some(Self::hello::<T>(write, me).await);
         let mut id = None;
-
         loop {
             let mut buffer = vec![0; 1 << 16];
             select! {
@@ -365,12 +341,11 @@ impl PeerComunication {
                                     }
                                 },
                                 (MessageType::Response | MessageType::Error, Some(corr_id)) => {
-                                    let mut responses = response_bus.lock().await;
-                                    let notif = Notify::new();
-                                    notif.notify_one();
-                                    if let Some((old_notif, _)) = responses.insert(corr_id, (notif, protocol_message.body)){
-                                        old_notif.notify_one()
-                                    }
+                                    response_bus.lock().await.get(&corr_id).and_then(|s| {
+                                        if let Some(response) = protocol_message.body {
+                                            s.send(protocol_message.body)
+                                        }
+                                    });
                                 },
                                 (MessageType::Response | MessageType::Error, None) => {
                                     error!(format!("There was a response with no correlation ID. Ignoring it {:?}", &protocol_message))
