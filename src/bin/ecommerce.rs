@@ -16,51 +16,65 @@ use tp::{
 #[actix_rt::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    let mut ports = args.ports;
     log_level!(args.verbosity);
-    let store_port = match get_closest_store(args.ports) {
-        Some(port) => port,
-        None => {
-            println!("No stores available");
-            return Ok(());
-        }
-    };
-    println!(
-        "Running E-Commerce which will connect to {}:{}",
-        args.ip, store_port
-    );
-    let client = Arc::new(Mutex::new(
-        TcpStream::connect(format!("{}:{}", args.ip, store_port)).await?,
-    ));
-    let orders = read_orders(args.file).await?;
-    let mut tasks = vec![];
-    for order in orders.iter() {
-        let order_clone = order.clone(); // clone order to send to store
-        let client_clone = client.clone();
-        // Create tokio task for each order
-        let t: tokio::task::JoinHandle<()> = tokio::spawn(async move {
-            match manage_purchase(order_clone, client_clone).await {
-                Ok(state) => {
-                    println!("Purchase state: {:?}", state.to_string());
-                    match state {
-                        PurchaseState::Commit(id) => {
-                            println!("Purchase completed. Id: {}", id);
-                        }
-                        _ => {
-                            println!("Purchase cancelled.");
+
+    while !ports.is_empty() {
+        let store_port = match get_closest_store(ports.clone()) {
+            Some(port) => port,
+            None => {
+                println!("No stores available");
+                return Ok(());
+            }
+        };
+        // Remove port from args.ports
+        let index = ports.clone().iter().position(|&x| x == store_port).unwrap();
+        ports.remove(index);
+        
+        println!(
+            "Running E-Commerce which will connect to {}:{}",
+            args.ip, store_port
+        );
+        let connection = match TcpStream::connect(format!("{}:{}", args.ip, store_port)).await {
+            Ok(c) => c,
+            Err(e) => {
+                println!("Error while connecting to store: {}", e);
+                continue;
+            }
+        };
+        let client = Arc::new(Mutex::new(connection));
+        let orders = read_orders(args.file.clone()).await?;
+        let mut tasks = vec![];
+        for order in orders.into_iter() {
+            let order_clone = order.clone(); // clone order to send to store
+            let client_clone = client.clone();
+            // Create tokio task for each order
+            let t: tokio::task::JoinHandle<()> = tokio::spawn(async move {
+                match manage_purchase(order_clone, client_clone).await {
+                    Ok(state) => {
+                        println!("Purchase state: {:?}", state.to_string());
+                        match state {
+                            PurchaseState::Commit(id) => {
+                                println!("Purchase completed. Id: {}", id);
+                            }
+                            _ => {
+                                println!("Purchase cancelled.");
+                            }
                         }
                     }
-                }
-                Err(e) => {
-                    println!("Error while managing purchase: {}", e);
-                }
-            };
-        });
-        tasks.push(t);
-        //tokio::time::sleep(Duration::from_secs(2)).await;
+                    Err(e) => {
+                        println!("Error while managing purchase: {}", e);
+                    }
+                };
+            });
+            tasks.push(t);
+            //tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        
+        let _ = futures::future::join_all(tasks).await;
+        
+    
     }
-
-    let _ = futures::future::join_all(tasks).await;
-
     Ok(())
 }
 

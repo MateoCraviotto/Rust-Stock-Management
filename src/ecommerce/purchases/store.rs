@@ -376,13 +376,7 @@ impl Handler<StoreMessage> for StoreActor {
                 orders: _,
             } => {
                 let stores_clone = self.stores.clone();
-                let self_info = stores_clone.get(&self.self_id).cloned();
-                let mut self_info = match self_info {
-                    Some(self_info) => self_info,
-                    None => {
-                        return None;
-                    }
-                };
+                let mut self_info = stores_clone.get(&self.self_id).cloned()?;
                 let new_stock = match new_stock {
                     Some(new_stock) => new_stock,
                     None => {
@@ -397,6 +391,7 @@ impl Handler<StoreMessage> for StoreActor {
                         self_info.stock.insert(product, qty);
                     }
                 }
+                println!("Current stock: {:?}", self_info.stock);
                 self.stores.insert(self.self_id, self_info);
                 None
             }

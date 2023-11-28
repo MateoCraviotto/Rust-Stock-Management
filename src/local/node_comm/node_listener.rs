@@ -80,8 +80,8 @@ where
 
     pub fn start(&mut self) {
         let cancel = CancellationToken::new();
-        let child_token = cancel.child_token();
-        let grand_child_token = child_token.child_token();
+        let child_token = cancel.clone();
+        let grand_child_token = cancel.clone();
         let node_comm = NodeCommunication::start(grand_child_token, self.me, self.operator.clone());
         let handle = tokio::spawn(Self::run(
             self.port,
@@ -104,6 +104,8 @@ where
         self.cancel = None;
         self.task_handle = None;
         self.node_comm = None;
+
+        self.start();
     }
 
     async fn run(
@@ -171,7 +173,9 @@ where
     pub async fn shutdown(&mut self) {
         info!("Shutting down the listening for new nodes");
         if let Some(cancel) = &self.cancel {
+            println!("cancelling (SHUTDOWN) {:?}", cancel);
             cancel.cancel();
+            println!("cancelled (SHUTDOWN) {:?}", cancel);
         }
         if let Some(task) = &self.task_handle {
             let _ = task.as_ref().lock().await;
@@ -184,9 +188,10 @@ where
 
     pub async fn is_running(&self) -> bool {
         match &self.task_handle {
-            Some(task) => {
-                let task = task.as_ref().lock().await;
-                task.is_finished()
+            Some(_) => {
+                //let task = task.as_ref().lock().await;
+                //task.is_finished()
+                true
             }
             None => false,
         }

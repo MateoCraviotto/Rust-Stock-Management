@@ -73,8 +73,9 @@ pub async fn listen_commands(
                         // in next iteration. Will block until all disconnections happened
                         let _ = futures::future::join_all(t).await;
                         t = vec![];
-
-                        if int_net.is_running().await {
+                        let is_running = int_net.is_running().await;
+                        println!("IS IT RUNNING? {}", is_running);
+                        if is_running {
                             int_net.shutdown().await;
                         }
 
@@ -100,7 +101,7 @@ pub async fn listen_commands(
                         });
                     }
                     Command::AddStock(o) => {
-                        info!(format!("Adding new stock: {:?}", o));
+                        info!(format!("Adding stock: {:?}", o));
                         let mut stock_to_add = Stock::new();
                         stock_to_add.insert(o.get_product(), o.get_qty());
                         store.do_send(StoreMessage {
@@ -119,7 +120,7 @@ pub async fn listen_commands(
         }
     }
 
-    let _ = cancel.clone();
+    let _ = cancel.cancel();
 
     let _ = futures::future::join_all(t).await;
     let _ = updater.await;

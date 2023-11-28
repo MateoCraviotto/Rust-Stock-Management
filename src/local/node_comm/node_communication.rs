@@ -377,14 +377,17 @@ impl PeerComunication {
                 }
 
                 _ = cancel.cancelled() => {
+                    println!("CANCELLING :)");
                     break;
                 }
             }
         }
-
+        println!("AAAAAAAAAAAAAAAAAaa");
         if let Some(from_id) = id {
+            println!("BBBBBBBBBBBB");
             actor.do_send(ActorLifetime::Shutdown(from_id));
             let _ = tx.send(PeerMessage::PeerDown(from_id)).await;
+            println!("CCCCCCCCCCCCCC");
         }
 
         Ok(())

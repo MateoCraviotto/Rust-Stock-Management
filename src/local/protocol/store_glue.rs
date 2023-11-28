@@ -187,7 +187,7 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                 }
             }
             .into_actor(self)
-            .map(move |result, me, _ctx| result),
+            .map(move |result, _me, _ctx| result),
         )
     }
 }
@@ -195,7 +195,7 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
 impl Handler<ActorLifetime> for StoreGlue {
     type Result = ();
 
-    fn handle(&mut self, msg: ActorLifetime, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: ActorLifetime, _ctx: &mut Self::Context) -> Self::Result {
         match msg {
             ActorLifetime::Shutdown(id) => {
                 self.store.do_send(StoreState::Shutdown(id));
