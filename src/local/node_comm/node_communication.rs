@@ -214,7 +214,7 @@ where
     }
 
     fn generate_correlation_id(&self) -> CorrelationID {
-        rand::thread_rng().gen::<CorrelationID>() >> 32 & ((self.me >> 32) << 32)
+        rand::thread_rng().gen()
     }
 }
 
@@ -341,9 +341,11 @@ impl PeerComunication {
                                     }
                                 },
                                 (MessageType::Response | MessageType::Error, Some(corr_id)) => {
-                                    response_bus.lock().await.get(&corr_id).and_then(|s| {
+                                    response_bus.lock().await.remove(&corr_id).and_then(|s| {
                                         if let Some(response) = protocol_message.body {
-                                            s.send(protocol_message.body)
+                                            Some(s.send(response))
+                                        } else {
+                                            None
                                         }
                                     });
                                 },
