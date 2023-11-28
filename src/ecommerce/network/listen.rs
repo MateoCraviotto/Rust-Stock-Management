@@ -1,7 +1,7 @@
-use std::{collections::HashMap, net::Ipv4Addr};
+use std::{collections::HashMap, net::Ipv4Addr, sync::Arc};
 
 use actix::{Actor, ActorFutureExt, Addr, Context, Handler, ResponseActFuture, WrapFuture};
-use tokio::{net::TcpListener, select};
+use tokio::{net::TcpListener, select, sync::Mutex};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -25,8 +25,8 @@ pub struct Listener {
     ip: Ipv4Addr,
     cancel_token: CancellationToken,
     store: Addr<StoreActor>,
-    internal_listener:
-        NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>,
+    arc_internal_listener:
+    Arc<Mutex<NodeListener<ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>, StoreGlue>>>,
 }
 
 impl Listener {
@@ -34,9 +34,9 @@ impl Listener {
         ip: Ipv4Addr,
         port: u16,
         store: Addr<StoreActor>,
-        internal_listener: NodeListener<
+        arc_internal_listener: Arc<Mutex<NodeListener<
             ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-            StoreGlue,
+            StoreGlue>>,
         >,
     ) -> Self {
         Listener {
@@ -45,7 +45,7 @@ impl Listener {
             port,
             ip,
             store,
-            internal_listener,
+            arc_internal_listener,
         }
     }
 }
@@ -76,7 +76,7 @@ impl Handler<ListenerState> for Listener {
                         to,
                         cancellation,
                         self.store.clone(),
-                        self.internal_listener.clone(),
+                        self.arc_internal_listener.clone(),
                     )
                     .into_actor(self)
                     .map(move |result, me, _ctx| {
@@ -111,9 +111,9 @@ async fn start_listening(
     to: String,
     cancel: CancellationToken,
     store: Addr<StoreActor>,
-    internal_listener: NodeListener<
+    arc_internal_listener: Arc<Mutex<NodeListener<
         ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-        StoreGlue,
+        StoreGlue>>,
     >,
 ) -> anyhow::Result<()> {
     let listener = TcpListener::bind(&to).await?;
@@ -126,7 +126,7 @@ async fn start_listening(
             conn_result = listener.accept() => {
                 let (stream, addr) = conn_result?;
                 info!(format!("New connection for {}", addr));
-                let (actor, task) = Communication::new(stream, store.clone(), internal_listener.clone());
+                let (actor, task) = Communication::new(stream, store.clone(), arc_internal_listener.clone());
                 let new = actor.start();
                 new.do_send(ListenerState::Start);
                 tasks.push(task);

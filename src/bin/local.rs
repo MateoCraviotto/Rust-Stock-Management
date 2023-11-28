@@ -1,7 +1,8 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, sync::Arc};
 
 use actix::Actor;
 use clap::Parser;
+use tokio::sync::Mutex;
 use tp::{
     ecommerce::{
         network::listen::Listener, purchases::store::StoreActor, sysctl::listener::listen_commands,
@@ -57,7 +58,8 @@ async fn start(
     let mut internal_listener =
         NodeListener::new(internal_port, ip, me, internal_port_list, store_glue);
     internal_listener.start();
+    let arc_internal_listener = Arc::new(Mutex::new(internal_listener));
     let listener =
-        Listener::new(ip, external_port, store.clone(), internal_listener.clone()).start();
-    listen_commands(listener, internal_listener, store).await
+        Listener::new(ip, external_port, store.clone(), arc_internal_listener.clone()).start();
+    listen_commands(listener, arc_internal_listener, store).await
 }

@@ -156,20 +156,22 @@ impl Handler<StoreMessage> for StoreActor {
                                     local_stock.insert(product, qty);
                                     self_info.stock.insert(product, current_qty - qty);
                                 }
+                                involved_stock.insert(self.self_id, local_stock.clone());
                             } else {
                                 remote_stock.insert(product, qty);
                             }
                         }
-                        involved_stock.insert(self.self_id, local_stock.clone());
 
                         debug!(format!("Local stock {:?}", local_stock.clone()));
                         debug!(format!("Remote stock {:?}", remote_stock.clone()));
+                        debug!(format!("Stores: {:?}", stores_clone.keys()));
                         // Check other nodes for remaining stock in remote_stock
                         // If there is enough stock, reserve it and add it to involved_stock
-                        if remote_stock.is_empty() {
+                        if !remote_stock.is_empty() {
                             for store_id in stores_clone.keys() {
                                 if store_id != &self.self_id {
                                     let store_info = self.stores.get(store_id).cloned();
+                                    debug!(format!("Store info: {:?}", store_info));
                                     match store_info {
                                         Some(mut store_info) => {
                                             println!(
@@ -177,8 +179,8 @@ impl Handler<StoreMessage> for StoreActor {
                                                 store_id, store_info.stock
                                             );
                                             let mut store_stock = Stock::new();
-                                            let mut remote_stock = remote_stock.clone();
-                                            for (product, qty) in remote_stock.clone() {
+                                            let remote_stock_clone = remote_stock.clone();
+                                            for (product, qty) in remote_stock_clone {
                                                 if store_info.stock.contains_key(&product) {
                                                     let current_qty = store_info.stock[&product];
                                                     if current_qty >= qty {
@@ -205,7 +207,7 @@ impl Handler<StoreMessage> for StoreActor {
                         let id: RequestID = rng.gen();
 
                         // If there is still stock in remote_stock, cancel the transaction
-                        if remote_stock.is_empty() {
+                        if !remote_stock.is_empty() {
                             return Some(Transaction {
                                 id,
                                 state: TransactionState::Cancelled,
@@ -389,14 +391,13 @@ impl Handler<StoreMessage> for StoreActor {
                     }
                 }
                 self.stores.insert(self.self_id, self_info);
-                println!("Current stock: {:?}", self.stores[&self.self_id].stock);
                 None
             }
             StoreMessage {
                 message_type: MessageType::Ask(request_id),
-                new_stock,
+                new_stock: _,
                 transactions: _,
-                orders: _,
+                orders,
             } => {
                 let stores_clone = self.stores.clone();
                 let self_info = stores_clone.get(&self.self_id).cloned();
@@ -406,17 +407,23 @@ impl Handler<StoreMessage> for StoreActor {
                         return None;
                     }
                 };
-                let new_stock = match new_stock {
+                /*let new_stock = match new_stock {
                     Some(new_stock) => new_stock,
+                    None => {
+                        return None;
+                    }
+                };*/
+                let orders = match orders {
+                    Some(orders) => orders,
                     None => {
                         return None;
                     }
                 };
                 // Check if I have every single product
-                for (product, qty) in new_stock.clone() {
-                    if self_info.stock.contains_key(&product) {
-                        let current_qty = self_info.stock[&product];
-                        if current_qty < qty {
+                for order in orders.clone() {
+                    if self_info.stock.contains_key(&order.get_product()) {
+                        let current_qty = self_info.stock[&order.get_product()];
+                        if current_qty < order.get_qty() {
                             return None;
                         }
                     } else {
@@ -424,9 +431,9 @@ impl Handler<StoreMessage> for StoreActor {
                     }
                 }
                 // Update my stock
-                for (product, qty) in new_stock {
-                    let current_qty = self_info.stock[&product];
-                    self_info.stock.insert(product, current_qty - qty);
+                for order in orders.clone() {
+                    let current_qty = self_info.stock[&order.get_product()];
+                    self_info.stock.insert(order.get_product(), current_qty - order.get_qty());
                 }
                 self.stores.insert(self.self_id, self_info);
 
@@ -435,6 +442,7 @@ impl Handler<StoreMessage> for StoreActor {
                     state: TransactionState::AwaitingConfirmation,
                     involved_stock: HashMap::new(),
                 };
+                // todo check if I should save the transaction with this local stock
                 if let Some(me) = self.stores.get_mut(&self.self_id) {
                     me.transactions.insert(request_id, transaction.clone());
                 }

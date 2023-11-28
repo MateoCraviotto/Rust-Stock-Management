@@ -40,16 +40,16 @@ impl Communication {
     pub fn new(
         stream: TcpStream,
         store: Addr<StoreActor>,
-        internal_listener: NodeListener<
+        arc_internal_listener: Arc<Mutex<NodeListener<
             ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-            StoreGlue,
+            StoreGlue>>,
         >,
     ) -> (Self, JoinHandle<anyhow::Result<()>>) {
         let mine = CancellationToken::new();
         let pair = mine.clone();
         let arc_stream = Arc::new(Mutex::new(stream));
 
-        let handle = tokio::spawn(serve(arc_stream, pair, store, internal_listener));
+        let handle = tokio::spawn(serve(arc_stream, pair, store, arc_internal_listener));
 
         (Self { cancel_token: mine }, handle)
     }
@@ -89,9 +89,9 @@ async fn serve(
     stream: Arc<Mutex<TcpStream>>,
     token: CancellationToken,
     store: Addr<StoreActor>,
-    internal_listener: NodeListener<
+    arc_internal_listener: Arc<Mutex<NodeListener<
         ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-        StoreGlue,
+        StoreGlue>>,
     >,
 ) -> anyhow::Result<()> {
     'serving: loop {
@@ -134,11 +134,12 @@ async fn serve(
                                         modifications: vec![stock.clone()],
                                     }
                                 }).collect();
-                                let node_request = get_node_request_with(Some(node_modifications), transaction.id,
-                                                                         RequestAction::Ask, internal_listener.me);
-                                // Send request to each node involved in the purchase
                                 let mut purchase_cancelled = false;
+                                let node_request = get_node_request_with(Some(node_modifications), transaction.id,
+                                                                         RequestAction::Ask, arc_internal_listener.as_ref().lock().await.me);
+                                // Send request to each node involved in the purchase
                                 for (store_id, _) in transaction.involved_stock.clone() {
+                                    let internal_listener = arc_internal_listener.as_ref().lock().await;
                                     if store_id != internal_listener.me {
                                         let response = internal_listener.commmunicate(store_id, node_request.clone()).await?;
                                         info!(format!("Request sent to store {}", store_id));
@@ -159,7 +160,7 @@ async fn serve(
                                         orders: None,
                                     };
                                     store.send(cancellation_message).await?;
-                                    notify_nodes(RequestAction::Cancel, transaction.clone(), internal_listener.clone()).await?;
+                                    notify_nodes(RequestAction::Cancel, transaction.clone(), arc_internal_listener.clone()).await?;
                                     // Notify ecommerce
                                     write_socket(stream.clone(), &PurchaseState::Cancel(transaction.id).to_string()).await?;
                                 } else {
@@ -171,7 +172,7 @@ async fn serve(
                                         orders: None,
                                     };
                                     store.send(confirmation_message).await?;
-                                    notify_nodes(RequestAction::Confirm, transaction.clone(), internal_listener.clone()).await?;
+                                    notify_nodes(RequestAction::Confirm, transaction.clone(), arc_internal_listener.clone()).await?;
                                     // Notify ecommerce
                                     write_socket(stream.clone(), &PurchaseState::Confirm(transaction.id).to_string()).await?;
                                 }
@@ -200,7 +201,7 @@ async fn serve(
                                     orders: None,
                                 };
                                 if let Some(transaction) = store.send(message).await? {
-                                    notify_nodes(RequestAction::Commit, transaction.clone(), internal_listener.clone()).await?;
+                                    notify_nodes(RequestAction::Commit, transaction.clone(), arc_internal_listener.clone()).await?;
                                     // Notify ecommerce that purchase is completed
                                     write_socket(stream.clone(), &PurchaseState::Commit(id).to_string()).await?;
                                 }
@@ -214,7 +215,7 @@ async fn serve(
                                     orders: None,
                                 };
                                 if let Some(transaction) = store.send(message).await? {
-                                    notify_nodes(RequestAction::Cancel, transaction.clone(), internal_listener.clone()).await?;
+                                    notify_nodes(RequestAction::Cancel, transaction.clone(), arc_internal_listener.clone()).await?;
                                     // Notify ecommerce that purchase was cancelled
                                     write_socket(stream.clone(), &PurchaseState::Cancel(id).to_string()).await?;
                                 }
@@ -299,11 +300,12 @@ fn get_node_modifications_for(
 async fn notify_nodes(
     action: RequestAction,
     transaction: Transaction,
-    internal_listener: NodeListener<
+    arc_internal_listener: Arc<Mutex<NodeListener<
         ProtocolMessage<HashMap<u64, u64>, AbsoluteStateUpdate>,
-        StoreGlue,
+        StoreGlue>>,
     >,
 ) -> anyhow::Result<()> {
+    let internal_listener = arc_internal_listener.as_ref().lock().await;
     let me = internal_listener.me;
     for (store_id, _) in transaction.involved_stock.clone() {
         if store_id != me {

@@ -145,9 +145,7 @@ where
             body: Some(msg),
         };
         self.send(node, with_header).await?;
-
         let response = self.get_response(correlation_id).await?;
-
         Ok(response)
     }
 
@@ -172,12 +170,12 @@ where
         };
         let bytes = &serde_json::to_vec(&with_header)?;
         let keys: Vec<NodeID> = {
-            let lock = self.responses.lock().await;
+            let lock = self.peers_writer.lock().await;
             let r = lock.keys().copied().collect();
             drop(lock);
             r
         };
-
+        
         Ok(
             futures::future::join_all(keys.into_iter().map(|key| self.send_bytes(key, &bytes)))
                 .await,
@@ -185,7 +183,8 @@ where
     }
 
     async fn send(&self, node: NodeID, msg: InterNodeMessage<T>) -> anyhow::Result<()> {
-        self.send_bytes(node, &serde_json::to_vec(&msg)?).await
+        let message = &serde_json::to_vec(&msg)?;
+        self.send_bytes(node, message).await
     }
 
     async fn send_bytes(&self, node: NodeID, msg: &[u8]) -> anyhow::Result<()> {
@@ -242,6 +241,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct PeerComunication {
     task_handle: JoinHandle<anyhow::Result<()>>,
 }
@@ -319,10 +319,13 @@ impl PeerComunication {
 
                             match (t, correlation) {
                                 (MessageType::Request, corr) => {
-                                    if let Some(body) = protocol_message.body{
-                                        match actor.send(body).await{
-                                            Ok(Ok(a)) => {
-                                                match a{
+                                    if let Some(body) = protocol_message.body {
+                                        println!("Received REQUEST FROM OTHER NODE: {:?}", body);
+                                        let response = actor.send(body).await?;
+                                        println!("response: {:?}", response);
+                                        match response {
+                                            Ok(a) => {
+                                                match a {
                                                     ProtocolEvent::MaybeNew => {
                                                         if let Some(writer) = writer_sent{
                                                             let _ = tx.send(PeerMessage::PeerUp(from_id, writer)).await;
@@ -331,6 +334,7 @@ impl PeerComunication {
                                                         }
                                                     },
                                                     ProtocolEvent::Response(response) => {
+                                                        println!("RESPONDING TO NODE WITH {:?}", response);
                                                         Self::send_back(&tx, from_id, InterNodeMessage{
                                                             from: me,
                                                             correlation_id: corr,
@@ -344,18 +348,19 @@ impl PeerComunication {
                                                     _ => {},
                                                 }
                                             },
-                                            Ok(Err(e)) => Self::send_back(&tx, from_id, InterNodeMessage {
+                                            Err(e) => Self::send_back(&tx, from_id, InterNodeMessage {
                                                 from: me,
                                                 correlation_id: None,
                                                 message_type: MessageType::Error,
                                                 body: Some(format!("{:?}", e))
                                             }).await,
-                                            Err(_) => Self::send_back(&tx, from_id, InterNodeMessage {
+                                            /*Err(_) => Self::send_back(&tx, from_id, InterNodeMessage {
                                                 from: me,
                                                 correlation_id: None,
                                                 message_type: MessageType::Error,
                                                 body: Some("Server error")
                                             }).await,
+                                            */
                                         };
                                     }
                                 },
@@ -379,8 +384,8 @@ impl PeerComunication {
                                 }
                             }
                         }
-                        Err(e) => {
-                            debug!(format!("Error al parsear un mensaje: {}", e));
+                        Err(_) => {
+                            //debug!(format!("Error al parsear un mensaje: {}", e));
                         }
                     }
                 }

@@ -138,8 +138,10 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                     }
                     ProtocolMessageType::Request => {
                         if let Some((req_id, m)) = Self::transform_request(me, msg) {
-                            return match store.send(m).await {
-                                Ok(Some(_)) => Ok(ProtocolEvent::Response(ProtocolStoreMessage {
+                            println!("Transformed request into: {:?}", m);
+                            match store.send(m).await {
+                                Ok(Some(_)) => {
+                                    return Ok(ProtocolEvent::Response(ProtocolStoreMessage {
                                     from: me,
                                     message_type: ProtocolMessageType::Request,
                                     request_information: Some(Request {
@@ -149,8 +151,9 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                                         information: None,
                                     }),
                                     update_information: None,
-                                })),
-                                Ok(None) => Ok(ProtocolEvent::Response(ProtocolStoreMessage {
+                                }))},
+                                Ok(None) => {
+                                    return Ok(ProtocolEvent::Response(ProtocolStoreMessage {
                                     from: me,
                                     message_type: ProtocolMessageType::Request,
                                     request_information: Some(Request {
@@ -160,16 +163,16 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                                         information: None,
                                     }),
                                     update_information: None,
-                                })),
+                                }))},
                                 Err(_) => bail!("Node error"),
-                            };
+                            }
                         }
                         bail!("Invalid request")
                     }
                 }
             }
             .into_actor(self)
-            .map(move |_result, _me, _ctx| Ok(ProtocolEvent::Nothing)),
+            .map(move |result, _me, _ctx| result),
         )
     }
 }

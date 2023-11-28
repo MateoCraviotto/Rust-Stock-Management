@@ -122,6 +122,7 @@ where
                     let (stream, addr) = conn_result?;
                     info!(format!("New node connection for {}", addr));
                     node_comms.push(node_comm.new_node(stream));
+                    println!("NODE COMMUNICATIONS: {:?}", node_comms);
                 }
 
                 _ = cancel.cancelled() => {

@@ -1,10 +1,10 @@
-use std::{str::FromStr, time::Duration};
+use std::{str::FromStr, time::Duration, sync::Arc};
 
 use actix::Addr;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     select,
-    task::JoinHandle,
+    task::JoinHandle, sync::Mutex,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -31,14 +31,14 @@ use crate::{
 
 pub async fn listen_commands(
     net: Addr<Listener>,
-    mut int_net: NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreGlue>,
+    arc_int_net: Arc<Mutex<NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreGlue>>>,
     store: Addr<StoreActor>,
 ) -> anyhow::Result<()> {
     println!("Reading commands from STDIN");
 
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let cancel = CancellationToken::new();
-    let updater = setup_updater(cancel.clone(), int_net.clone(), store.clone());
+    let updater = setup_updater(cancel.clone(), arc_int_net.clone(), store.clone());
 
     // Save all the times that we tell the network to go up so we wait on all of them.
     // All of them should finish at the same time because of the cancellation tokens
@@ -46,9 +46,9 @@ pub async fn listen_commands(
     t.push(start_listener(net.clone()));
 
     'main: loop {
-        //let store_clone = store.clone();
         let r = lines.next_line().await;
         if let Ok(Some(line)) = r {
+            let mut int_net = arc_int_net.as_ref().lock().await;
             match Command::from_str(&line) {
                 Ok(c) => match c {
                     Command::Shutdown => {
@@ -157,20 +157,23 @@ fn print_commands() {
 
 fn setup_updater(
     finish: CancellationToken,
-    int_net: NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreGlue>,
+    int_net: Arc<Mutex<NodeListener<ProtocolMessage<Stock, AbsoluteStateUpdate>, StoreGlue>>>,
     store: Addr<StoreActor>,
 ) -> JoinHandle<anyhow::Result<()>>{
     tokio::spawn(async move {
         loop {
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_millis(1000)).await;
             select! {
                 res = store.send(StoreState::CurrentState) => {
                     match res {
                         Ok(Some((id, info))) => {
                             let msg = transform_info(id,info);
+                            let int_net = int_net.as_ref().lock().await;
                             let _ = int_net.broadcast(msg).await;
                         },
-                        _ => todo!(),
+                        _ => {
+                            println!("There was an error while getting the current state");
+                        },
                     }
                 }
 

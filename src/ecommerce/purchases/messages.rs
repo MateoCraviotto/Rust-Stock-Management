@@ -8,6 +8,8 @@ use super::store::{Stock, Transaction};
 
 pub type RequestID = u128;
 pub type StoreID = u64;
+
+#[derive(Debug)]
 pub enum MessageType {
     Update(StoreID),
     Request,
@@ -42,7 +44,7 @@ pub enum RequestResponse {
     RequestNOK,
 }
 
-#[derive(Message)]
+#[derive(Message, Debug)]
 #[rtype(result = "Option<Transaction>")]
 pub struct StoreMessage {
     pub message_type: MessageType,
