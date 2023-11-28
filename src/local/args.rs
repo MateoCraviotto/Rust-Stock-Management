@@ -29,6 +29,6 @@ pub struct Args {
     pub ip: Ipv4Addr,
 
     /// Tells the level of verbosity
-    #[arg(short, long, default_value_t = Verbosity::Debug)]
+    #[arg(short, long, default_value_t = Verbosity::Info)]
     pub verbosity: Verbosity,
 }

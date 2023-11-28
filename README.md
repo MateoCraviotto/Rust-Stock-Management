@@ -99,4 +99,4 @@ Para ejecutar un ecommerce se utiliza el siguiente comando:
 
 ### Log level
 
-Además, a ambos comandos se puede agregar el parámetro `--verbosity` que tiene las opciones *info*, *warning*, *error* o *debug* para establecer el nivel de loggeo de esa terminal. El valor por defecto es *debug*.
+Además, a ambos comandos se puede agregar el parámetro `--verbosity` que tiene las opciones *info*, *warning*, *error* o *debug* para establecer el nivel de loggeo de esa terminal. El valor por defecto es *info*.
