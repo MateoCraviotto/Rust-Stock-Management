@@ -3,7 +3,7 @@ use std::str::FromStr;
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 struct PurchaseNumber(u32);
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum PurchaseState {
     Confirm(u128),
     Commit(u128),

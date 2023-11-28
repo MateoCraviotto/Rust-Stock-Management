@@ -77,12 +77,12 @@ La informacion de cada nodo se actualiza de forma periodica, para que las transa
 
 Para ejecutar un local o tienda (store) se utiliza el siguiente comando:
 
-`cargo run --bin local -- --port-intern 12345 --extern-port 12312 --store-id 1 --node-ports 12346;12347 --ip 127.0.0.1`
+`cargo run --bin local -- --port-intern 12345 --extern-port 12312 --store-id 1 --node-ports 12346 12347 --ip 127.0.0.1`
 
 - `port-intern` determina el puerto utilizado por este local para la red interna de tiendas/stores
 - `extern-port` determina el puerto utilizado por este local para la comunicación con los ecommerce
-- `store-id` es el identificador de la tienda que estamos ejecutando. Dene ser un entero no signado u64 que no hayamos asignado a otra tienda.
-- `node-ports` determina los puertos internos de los otros nodos (tiendas) que vayamos a ejecutar, separados por punto y coma (;)
+- `store-id` es el identificador de la tienda que estamos ejecutando. Dene ser un entero no signado u64 que no hayamos asignado a otra tienda
+- `node-ports` determina los puertos internos de los otros nodos (tiendas) que vayamos a ejecutar, separados por espacio
 - `ip` es la dirección IP a la que se vincula el listener que escucha conexiones de los ecommerce. El valor por defecto es `127.0.0.1`
 
 Lógicamente, los valores de estos parámetros se colocan a preferencia del usuario.
@@ -91,9 +91,9 @@ Lógicamente, los valores de estos parámetros se colocan a preferencia del usua
 
 Para ejecutar un ecommerce se utiliza el siguiente comando:
 
-`cargo run --bin ecommerce -- --ports 12312;12313 --ip 127.0.0.1`
+`cargo run --bin ecommerce -- --ports 12312 12313 --ip 127.0.0.1`
 
-- `ports` son los puertos externos de las tiendas a las que se conecta el ecommerce
+- `ports` son los puertos externos de las tiendas a las que se conecta el ecommerce, separados por espacio
 - `ip` es la dirección IP de las tiendas a las que se conecta el ecommerce
 
 

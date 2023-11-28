@@ -19,8 +19,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::error;
 use crate::local::NodeID;
+use crate::{error, debug};
 
 use super::{ActorLifetime, ProtocolEvent};
 
@@ -298,6 +298,7 @@ impl PeerComunication {
 
                     match parsed{
                         Ok(protocol_message) => {
+                            debug!(format!("RECEIVED REQUEST FROM OTHER NODE: {:?}", protocol_message));
                             let from_id = protocol_message.from;
                             let correlation = protocol_message.correlation_id;
                             let t = &protocol_message.message_type;
@@ -305,9 +306,7 @@ impl PeerComunication {
                             match (t, correlation) {
                                 (MessageType::Request, corr) => {
                                     if let Some(body) = protocol_message.body {
-                                        println!("Received REQUEST FROM OTHER NODE: {:?}", body);
                                         let response = actor.send(body).await?;
-                                        println!("response: {:?}", response);
                                         match response {
                                             Ok(a) => {
                                                 match a {
@@ -319,13 +318,15 @@ impl PeerComunication {
                                                         }
                                                     },
                                                     ProtocolEvent::Response(response) => {
-                                                        println!("RESPONDING TO NODE WITH {:?}", response);
-                                                        Self::send_back(&tx, from_id, InterNodeMessage{
+                                                        debug!(format!("RESPONDING TO NODE WITH {:?}", response));
+                                                        let internode_message = InterNodeMessage{
                                                             from: me,
                                                             correlation_id: corr,
                                                             message_type: MessageType::Response,
                                                             body: Some(response)
-                                                        }).await;
+                                                        };
+                                                        debug!(format!("INTERNODE MESSAGE TO SEND {:?}", internode_message));
+                                                        Self::send_back(&tx, from_id, internode_message).await;
                                                     }
                                                     ProtocolEvent::Teardown => {
                                                         break;
@@ -352,7 +353,7 @@ impl PeerComunication {
                                 (MessageType::Response | MessageType::Error, Some(corr_id)) => {
                                     let _ = response_bus.lock().await.remove(&corr_id).is_some_and(|s| {
                                         if let Some(response) = protocol_message.body {
-                                            s.send(response);
+                                            let _ = s.send(response);
                                         }
                                         true
                                     });

@@ -9,7 +9,7 @@ use super::store::{Stock, Transaction};
 pub type RequestID = u128;
 pub type StoreID = u64;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum MessageType {
     Update(StoreID),
     Request,

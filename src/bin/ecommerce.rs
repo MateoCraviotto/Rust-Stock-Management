@@ -1,5 +1,5 @@
 use clap::Parser;
-use rand::seq::SliceRandom;
+use rand::{seq::SliceRandom, Rng};
 use std::{str::FromStr, sync::Arc};
 use tokio::{net::TcpStream, sync::Mutex};
 use tp::{
@@ -13,12 +13,17 @@ use tp::{
     log_level,
 };
 
-// Missing retry policy when the store is down or does not have stock
 #[actix_rt::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     log_level!(args.verbosity);
-    let store_port = get_closest_store(args.ports).unwrap(); // remove unwrap
+    let store_port = match get_closest_store(args.ports) {
+        Some(port) => port,
+        None => {
+            println!("No stores available");
+            return Ok(());
+        }
+    };
     println!(
         "Running E-Commerce which will connect to {}:{}",
         args.ip, store_port
@@ -75,11 +80,12 @@ async fn manage_purchase(
     match answer_state {
         PurchaseState::Confirm(id) => {
             println!("Stock reserved");
-            println!("Committing purchase");
-            // todo: Add logic to cancel some purchases
-            let commit_msg = PurchaseState::Commit(id).to_string();
-            write_socket(store.clone(), &commit_msg).await?;
+            let msg = determine_commit_or_cancel(id);
+            println!("Voy a escribir {}", msg);
+            write_socket(store.clone(), &msg).await?;
+            println!("------escribí");
             let answer = read_socket(store.clone()).await?;
+            println!("------leí");
             let confirmation_state = PurchaseState::from_str(&answer)?;
 
             match confirmation_state {
@@ -123,4 +129,16 @@ fn get_closest_store(ports: Vec<u16>) -> Option<u16> {
     // Get a random store port
     let port = ports.choose(&mut rand::thread_rng()).map(|x| *x);
     port
+}
+
+fn determine_commit_or_cancel(id: u128) -> String {
+    let mut rng = rand::thread_rng();
+    let random_number: u8 = rng.gen_range(0..10);
+    if random_number == 0 {
+        println!("Cancelling purchase. Took to long for products to arrive.");
+        PurchaseState::Cancel(id).to_string()
+    } else {
+        println!("Committing purchase");
+        PurchaseState::Commit(id).to_string()
+    }
 }

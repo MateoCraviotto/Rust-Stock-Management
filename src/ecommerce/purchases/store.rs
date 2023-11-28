@@ -124,7 +124,8 @@ impl Handler<StoreMessage> for StoreActor {
                 transactions: _,
                 orders,
             } => {
-                let new_transaction_id = self.stores[&self.self_id].transactions.len() as u128;
+                let mut rng = rand::thread_rng();
+                let new_transaction_id: RequestID = rng.gen();
                 let stores_clone = self.stores.clone();
                 let self_info = stores_clone.get(&self.self_id).cloned();
                 match self_info {
@@ -217,13 +218,12 @@ impl Handler<StoreMessage> for StoreActor {
                             }
                         }
 
-                        let mut rng = rand::thread_rng(); // Change this
-                        let id: RequestID = rng.gen();
+                        
 
                         // If there is still stock in remote_stock, cancel the transaction
                         if !remote_stock.is_empty() {
                             return Some(Transaction {
-                                id,
+                                id: new_transaction_id,
                                 state: TransactionState::Cancelled,
                                 involved_stock,
                             });
@@ -234,7 +234,7 @@ impl Handler<StoreMessage> for StoreActor {
                             state: TransactionState::AwaitingConfirmation,
                             involved_stock,
                         };
-                        self_info.transactions.insert(id, transaction.clone());
+                        self_info.transactions.insert(new_transaction_id, transaction.clone());
                         self.stores.insert(self.self_id, self_info);
 
                         Some(transaction)
@@ -248,13 +248,8 @@ impl Handler<StoreMessage> for StoreActor {
                 transactions: _,
                 orders: _,
             } => {
-                let self_info = self.stores.get_mut(&self.self_id);
-                let self_info = match self_info {
-                    Some(self_info) => self_info,
-                    None => {
-                        return None;
-                    }
-                };
+                let self_info = self.stores.get_mut(&self.self_id)?;
+                println!("Transactions: {:?}", self_info.transactions);
                 let transaction = self_info.transactions.get(&request_id).cloned();
                 match transaction {
                     Some(mut transaction) => {
@@ -275,13 +270,8 @@ impl Handler<StoreMessage> for StoreActor {
                 orders: _,
             } => {
                 let stores_clone = self.stores.clone();
-                let self_info = stores_clone.get(&self.self_id).cloned();
-                let mut self_info = match self_info {
-                    Some(self_info) => self_info,
-                    None => {
-                        return None;
-                    }
-                };
+                let mut self_info = stores_clone.get(&self.self_id).cloned()?;
+                println!("Transactions: {:?}", self_info.transactions);
                 let transaction = self_info.transactions.get(&request_id).cloned();
                 let mut transaction = match transaction {
                     Some(transaction) => transaction,
@@ -491,7 +481,7 @@ impl Handler<StoreMessage> for StoreActor {
                     .insert(request_id, transaction.clone());
                 // Add changes in the cloned transaction to the store
                 self.stores.insert(self.self_id, self_info.clone());
-                Some(transaction)
+                None
             }
         }
     }

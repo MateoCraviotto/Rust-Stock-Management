@@ -133,8 +133,15 @@ async fn serve(
                                     }
                                 }).collect();
                                 let mut purchase_cancelled = false;
+                                let me = {
+                                    let internal_listener = arc_internal_listener.as_ref().lock().await;
+                                    let me_clone = internal_listener.me.clone();
+                                    drop(internal_listener);
+                                    me_clone
+                                };
+                                
                                 let node_request = get_node_request_with(Some(node_modifications), transaction.id,
-                                                                         RequestAction::Ask, arc_internal_listener.as_ref().lock().await.me);
+                                                                         RequestAction::Ask, me);
                                 // Send request to each node involved in the purchase
                                 for (store_id, _) in transaction.involved_stock.clone() {
                                     let internal_listener = arc_internal_listener.as_ref().lock().await;
@@ -189,6 +196,7 @@ async fn serve(
                 }
                 match PurchaseState::from_str(&data) {
                     Ok(purchase_state) => {
+                        println!("purchase state OK: {:?}", purchase_state);
                         match purchase_state {
                             PurchaseState::Commit(id) => {
                                 println!("Purchase confirmed from ecommerce. Notifying all involved stores.");
@@ -218,10 +226,15 @@ async fn serve(
                                     write_socket(stream.clone(), &PurchaseState::Cancel(id).to_string()).await?;
                                 }
                             },
-                            _ => {},
+                            _ => {
+                                println!("purchase state _: {:?}", purchase_state);
+                            },
                         }
                     },
-                    Err(_) => continue, // Do nothing
+                    Err(_) => {
+                        println!("continue");
+                        continue
+                    }, // Do nothing
                 };
             }
 
@@ -307,12 +320,13 @@ async fn notify_nodes(
     for (store_id, _) in transaction.involved_stock.clone() {
         if store_id != me {
             let node_modifications: Vec<NodeModification<_>> =
-                get_node_modifications_for(transaction.involved_stock.clone());
+            get_node_modifications_for(transaction.involved_stock.clone());
             let node_request =
-                get_node_request_with(Some(node_modifications), transaction.id, action.clone(), me);
+            get_node_request_with(Some(node_modifications), transaction.id, action.clone(), me);
             internal_listener
                 .send_message(store_id, node_request)
                 .await?;
+            println!("---------Notified store {}", store_id);
         }
     }
 

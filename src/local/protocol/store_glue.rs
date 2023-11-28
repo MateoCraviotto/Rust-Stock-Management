@@ -140,34 +140,42 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                     ProtocolMessageType::Request => {
                         if let Some((req_id, m)) = Self::transform_request(me, msg) {
                             println!("Transformed request into: {:?}", m);
-                            match store.send(m).await {
-                                Ok(Some(_)) => {
-                                    return Ok(ProtocolEvent::Response(ProtocolStoreMessage {
-                                        from: me,
-                                        message_type: ProtocolMessageType::Request,
-                                        request_information: Some(Request {
-                                            request_id: req_id,
-                                            requester: from,
-                                            request_state: RequestAction::Confirm,
-                                            information: None,
-                                        }),
-                                        update_information: None,
-                                    }))
+                            match m.message_type {
+                                MessageType::Ask(_) => {
+                                    match store.send(m).await {
+                                        Ok(Some(_)) => {
+                                            return Ok(ProtocolEvent::Response(ProtocolStoreMessage {
+                                                from: me,
+                                                message_type: ProtocolMessageType::Request,
+                                                request_information: Some(Request {
+                                                    request_id: req_id,
+                                                    requester: from,
+                                                    request_state: RequestAction::Confirm,
+                                                    information: None,
+                                                }),
+                                                update_information: None,
+                                            }))
+                                        }
+                                        Ok(None) => {
+                                            return Ok(ProtocolEvent::Response(ProtocolStoreMessage {
+                                                from: me,
+                                                message_type: ProtocolMessageType::Request,
+                                                request_information: Some(Request {
+                                                    request_id: req_id,
+                                                    requester: from,
+                                                    request_state: RequestAction::Cancel,
+                                                    information: None,
+                                                }),
+                                                update_information: None,
+                                            }))
+                                        }
+                                        Err(_) => bail!("Node error"),
+                                    };
+                                },
+                                _ => {
+                                    let _ = store.send(m).await;
+                                    return Ok(ProtocolEvent::Nothing);
                                 }
-                                Ok(None) => {
-                                    return Ok(ProtocolEvent::Response(ProtocolStoreMessage {
-                                        from: me,
-                                        message_type: ProtocolMessageType::Request,
-                                        request_information: Some(Request {
-                                            request_id: req_id,
-                                            requester: from,
-                                            request_state: RequestAction::Cancel,
-                                            information: None,
-                                        }),
-                                        update_information: None,
-                                    }))
-                                }
-                                Err(_) => bail!("Node error"),
                             }
                         }
                         bail!("Invalid request")

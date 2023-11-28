@@ -9,7 +9,7 @@ use crate::common::log::Verbosity;
 #[command(author, version, about, long_about=None)]
 pub struct Args {
     /// Port of the local to connect to
-    #[arg(short, long)]
+    #[arg(short, long, value_parser, num_args = 1.., value_delimiter = ' ')]
     pub ports: Vec<u16>,
 
     /// Ip of the local to connect to
