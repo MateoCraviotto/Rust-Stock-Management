@@ -1,3 +1,5 @@
+use actix::Message;
+
 use super::NodeID;
 
 pub mod node_communication;
@@ -9,4 +11,10 @@ pub enum ProtocolEvent<T> {
     MaybeNew,
     Response(T),
     Teardown,
+}
+
+#[derive(Message, Debug)]
+#[rtype(result = "()")]
+pub enum ActorLifetime {
+    Shutdown(NodeID),
 }

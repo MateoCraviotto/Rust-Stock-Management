@@ -100,6 +100,8 @@ impl Handler<StoreMessage> for StoreActor {
                         if let Some(t) = transactions {
                             info.transactions = t;
                         }
+
+                        info.is_online(true);
                     }
                     None => {
                         let mut info = Self::create_info();
@@ -109,6 +111,7 @@ impl Handler<StoreMessage> for StoreActor {
                         if let Some(t) = transactions {
                             info.transactions = t;
                         }
+                        info.is_online(true);
                         self.stores.insert(store_id, info);
                     }
                 }
@@ -165,39 +168,50 @@ impl Handler<StoreMessage> for StoreActor {
                         debug!(format!("Local stock {:?}", local_stock.clone()));
                         debug!(format!("Remote stock {:?}", remote_stock.clone()));
                         debug!(format!("Stores: {:?}", stores_clone.keys()));
+
+                        let able_remote: Vec<u64> = self.stores.iter()
+                        .filter_map(|(store_id, info)|{
+                            if *store_id == self.self_id {
+                                return None;
+                            }
+                            if !info.is_online {
+                                return None;
+                            }
+
+                            Some(*store_id)
+                        }).collect();
+
                         // Check other nodes for remaining stock in remote_stock
                         // If there is enough stock, reserve it and add it to involved_stock
                         if !remote_stock.is_empty() {
-                            for store_id in stores_clone.keys() {
-                                if store_id != &self.self_id {
-                                    let store_info = self.stores.get(store_id).cloned();
-                                    debug!(format!("Store info: {:?}", store_info));
-                                    match store_info {
-                                        Some(mut store_info) => {
-                                            println!(
-                                                "Store {} has stock {:?}",
-                                                store_id, store_info.stock
-                                            );
-                                            let mut store_stock = Stock::new();
-                                            let remote_stock_clone = remote_stock.clone();
-                                            for (product, qty) in remote_stock_clone {
-                                                if store_info.stock.contains_key(&product) {
-                                                    let current_qty = store_info.stock[&product];
-                                                    if current_qty >= qty {
-                                                        store_stock.insert(product, qty); // Reserve node stock
-                                                        store_info
-                                                            .stock
-                                                            .insert(product, current_qty - qty); // Update node stock
-                                                        remote_stock.remove(&product);
-                                                    }
+                            for store_id in &able_remote {
+                                let store_info = self.stores.get(store_id).cloned();
+                                debug!(format!("Store info: {:?}", store_info));
+                                match store_info {
+                                    Some(mut store_info) => {
+                                        println!(
+                                            "Store {} has stock {:?}",
+                                            store_id, store_info.stock
+                                        );
+                                        let mut store_stock = Stock::new();
+                                        let remote_stock_clone = remote_stock.clone();
+                                        for (product, qty) in remote_stock_clone {
+                                            if store_info.stock.contains_key(&product) {
+                                                let current_qty = store_info.stock[&product];
+                                                if current_qty >= qty {
+                                                    store_stock.insert(product, qty); // Reserve node stock
+                                                    store_info
+                                                        .stock
+                                                        .insert(product, current_qty - qty); // Update node stock
+                                                    remote_stock.remove(&product);
                                                 }
                                             }
-                                            self.stores.insert(*store_id, store_info);
-                                            involved_stock.insert(*store_id, store_stock);
                                         }
-                                        None => {
-                                            continue;
-                                        }
+                                        self.stores.insert(*store_id, store_info);
+                                        involved_stock.insert(*store_id, store_stock);
+                                    }
+                                    None => {
+                                        continue;
                                     }
                                 }
                             }
@@ -486,9 +500,16 @@ impl Handler<StoreMessage> for StoreActor {
 impl Handler<StoreState> for StoreActor {
     type Result = Option<(StoreID, StoreInformation)>;
 
-    fn handle(&mut self, _msg: StoreState, _ctx: &mut Self::Context) -> Self::Result {
-        self.stores
-            .get(&self.self_id)
-            .and_then(|info| Some((self.self_id, info.clone())))
+    fn handle(&mut self, msg: StoreState, _ctx: &mut Self::Context) -> Self::Result {
+        match msg {
+            StoreState::CurrentState => self
+                .stores
+                .get(&self.self_id)
+                .and_then(|info| Some((self.self_id, info.clone()))),
+            StoreState::Shutdown(store_id) => self.stores.get_mut(&store_id).and_then(|store| {
+                store.is_online(false);
+                None
+            }),
+        }
     }
 }

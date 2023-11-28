@@ -15,7 +15,7 @@ use crate::{debug, info};
 
 use super::{
     node_communication::{NodeCommunication, PeerComunication},
-    NodeID, ProtocolEvent,
+    ActorLifetime, NodeID, ProtocolEvent,
 };
 
 #[derive(Clone)]
@@ -26,7 +26,9 @@ pub struct NodeListener<
         + Serialize
         + DeserializeOwned
         + 'static,
-    A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
+    A: Actor
+        + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>
+        + actix::Handler<ActorLifetime, Result = ()>,
 > {
     pub me: NodeID,
     port: u16,
@@ -47,11 +49,14 @@ impl<
             + Serialize
             + DeserializeOwned
             + 'static,
-        A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
+        A: Actor
+            + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>
+            + actix::Handler<ActorLifetime, Result = ()>,
     > NodeListener<T, A>
 where
-    <A as Actor>::Context: ToEnvelope<A, T>,
-    <T as actix::Message>::Result: std::marker::Send,
+<A as Actor>::Context: ToEnvelope<A, T>,
+<A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
+<T as actix::Message>::Result: std::marker::Send,
 {
     pub fn new(
         port: u16,

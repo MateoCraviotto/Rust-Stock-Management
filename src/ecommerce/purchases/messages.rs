@@ -1,5 +1,5 @@
-use crate::common::order::Order;
 use crate::ecommerce::purchases::store::StoreInformation;
+use crate::{common::order::Order, local::NodeID};
 use actix::Message;
 use anyhow::bail;
 use std::{collections::HashMap, str::FromStr};
@@ -57,4 +57,5 @@ pub struct StoreMessage {
 #[rtype(result = "Option<(StoreID,StoreInformation)>")]
 pub enum StoreState {
     CurrentState,
+    Shutdown(StoreID),
 }

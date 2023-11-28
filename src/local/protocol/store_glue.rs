@@ -7,8 +7,9 @@ use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
 use crate::common::order::Order;
-use crate::ecommerce::purchases::messages::{MessageType, StoreID, StoreMessage};
+use crate::ecommerce::purchases::messages::{MessageType, StoreID, StoreMessage, StoreState};
 use crate::ecommerce::purchases::store::{StoreActor, Transaction};
+use crate::local::node_comm::ActorLifetime;
 use crate::local::protocol::messages::Request;
 use crate::local::{NodeID, RequestID};
 use crate::{ecommerce::purchases::store::Stock, local::node_comm::ProtocolEvent};
@@ -174,7 +175,19 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                 }
             }
             .into_actor(self)
-            .map(move |result, _me, _ctx| result),
+            .map(move |result, me, _ctx| result),
         )
+    }
+}
+
+impl Handler<ActorLifetime> for StoreGlue {
+    type Result = ();
+
+    fn handle(&mut self, msg: ActorLifetime, ctx: &mut Self::Context) -> Self::Result {
+        match msg {
+            ActorLifetime::Shutdown(id) => {
+                self.store.do_send(StoreState::Shutdown(id));
+            }
+        }
     }
 }

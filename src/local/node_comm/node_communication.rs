@@ -19,10 +19,10 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::local::NodeID;
 use crate::error;
+use crate::local::NodeID;
 
-use super::ProtocolEvent;
+use super::{ActorLifetime, ProtocolEvent};
 
 type CorrelationID = u64;
 
@@ -69,11 +69,14 @@ impl<
             + Serialize
             + DeserializeOwned
             + 'static,
-        A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
+        A: Actor
+            + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>
+            + actix::Handler<ActorLifetime, Result = ()>,
     > NodeCommunication<T, A>
 where
-    <A as Actor>::Context: ToEnvelope<A, T>,
-    <T as actix::Message>::Result: std::marker::Send,
+<A as Actor>::Context: ToEnvelope<A, T>,
+<A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
+<T as actix::Message>::Result: std::marker::Send,
 {
     pub fn start(cancel: CancellationToken, me: NodeID, actor: Addr<A>) -> Arc<Self> {
         let (peer_tx, peer_rx) = mpsc::channel(256);
@@ -232,7 +235,9 @@ impl PeerComunication {
             + Serialize
             + DeserializeOwned
             + 'static,
-        A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
+        A: Actor
+            + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>
+            + actix::Handler<ActorLifetime, Result = ()>,
     >(
         me: NodeID,
         stream: TcpStream,
@@ -242,8 +247,9 @@ impl PeerComunication {
         response_bus: Arc<Mutex<HashMap<CorrelationID, oneshot::Sender<T>>>>,
     ) -> Self
     where
-        <A as Actor>::Context: ToEnvelope<A, T>,
-        <T as actix::Message>::Result: std::marker::Send,
+    <A as Actor>::Context: ToEnvelope<A, T>,
+    <A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
+    <T as actix::Message>::Result: std::marker::Send,
     {
         Self {
             task_handle: tokio::spawn(Self::run(me, stream, cancel, tx, actor, response_bus)),
@@ -258,7 +264,9 @@ impl PeerComunication {
             + Serialize
             + DeserializeOwned
             + 'static,
-        A: Actor + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>,
+        A: Actor
+            + actix::Handler<T, Result = ResponseActFuture<A, anyhow::Result<ProtocolEvent<T>>>>
+            + actix::Handler<ActorLifetime, Result = ()>,
     >(
         me: NodeID,
         stream: TcpStream,
@@ -269,6 +277,7 @@ impl PeerComunication {
     ) -> anyhow::Result<()>
     where
         <A as Actor>::Context: ToEnvelope<A, T>,
+        <A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
         <T as actix::Message>::Result: std::marker::Send,
     {
         let (mut read, write) = stream.into_split();
@@ -341,12 +350,11 @@ impl PeerComunication {
                                     }
                                 },
                                 (MessageType::Response | MessageType::Error, Some(corr_id)) => {
-                                    response_bus.lock().await.remove(&corr_id).and_then(|s| {
+                                    let _ = response_bus.lock().await.remove(&corr_id).is_some_and(|s| {
                                         if let Some(response) = protocol_message.body {
-                                            Some(s.send(response))
-                                        } else {
-                                            None
+                                            s.send(response);
                                         }
+                                        true
                                     });
                                 },
                                 (MessageType::Response | MessageType::Error, None) => {
@@ -374,6 +382,7 @@ impl PeerComunication {
         }
 
         if let Some(from_id) = id {
+            actor.do_send(ActorLifetime::Shutdown(from_id));
             let _ = tx.send(PeerMessage::PeerDown(from_id)).await;
         }
 
