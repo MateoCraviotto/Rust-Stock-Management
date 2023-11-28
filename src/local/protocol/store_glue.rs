@@ -144,34 +144,38 @@ impl Handler<ProtocolStoreMessage> for StoreGlue {
                                 MessageType::Ask(_) => {
                                     match store.send(m).await {
                                         Ok(Some(_)) => {
-                                            return Ok(ProtocolEvent::Response(ProtocolStoreMessage {
-                                                from: me,
-                                                message_type: ProtocolMessageType::Request,
-                                                request_information: Some(Request {
-                                                    request_id: req_id,
-                                                    requester: from,
-                                                    request_state: RequestAction::Confirm,
-                                                    information: None,
-                                                }),
-                                                update_information: None,
-                                            }))
+                                            return Ok(ProtocolEvent::Response(
+                                                ProtocolStoreMessage {
+                                                    from: me,
+                                                    message_type: ProtocolMessageType::Request,
+                                                    request_information: Some(Request {
+                                                        request_id: req_id,
+                                                        requester: from,
+                                                        request_state: RequestAction::Confirm,
+                                                        information: None,
+                                                    }),
+                                                    update_information: None,
+                                                },
+                                            ))
                                         }
                                         Ok(None) => {
-                                            return Ok(ProtocolEvent::Response(ProtocolStoreMessage {
-                                                from: me,
-                                                message_type: ProtocolMessageType::Request,
-                                                request_information: Some(Request {
-                                                    request_id: req_id,
-                                                    requester: from,
-                                                    request_state: RequestAction::Cancel,
-                                                    information: None,
-                                                }),
-                                                update_information: None,
-                                            }))
+                                            return Ok(ProtocolEvent::Response(
+                                                ProtocolStoreMessage {
+                                                    from: me,
+                                                    message_type: ProtocolMessageType::Request,
+                                                    request_information: Some(Request {
+                                                        request_id: req_id,
+                                                        requester: from,
+                                                        request_state: RequestAction::Cancel,
+                                                        information: None,
+                                                    }),
+                                                    update_information: None,
+                                                },
+                                            ))
                                         }
                                         Err(_) => bail!("Node error"),
                                     };
-                                },
+                                }
                                 _ => {
                                     let _ = store.send(m).await;
                                     return Ok(ProtocolEvent::Nothing);

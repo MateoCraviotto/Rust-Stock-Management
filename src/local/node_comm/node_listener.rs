@@ -54,9 +54,9 @@ impl<
             + actix::Handler<ActorLifetime, Result = ()>,
     > NodeListener<T, A>
 where
-<A as Actor>::Context: ToEnvelope<A, T>,
-<A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
-<T as actix::Message>::Result: std::marker::Send,
+    <A as Actor>::Context: ToEnvelope<A, T>,
+    <A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
+    <T as actix::Message>::Result: std::marker::Send,
 {
     pub fn new(
         port: u16,

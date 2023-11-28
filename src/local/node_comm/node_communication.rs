@@ -20,7 +20,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::local::NodeID;
-use crate::{error, debug};
+use crate::{debug, error};
 
 use super::{ActorLifetime, ProtocolEvent};
 
@@ -74,9 +74,9 @@ impl<
             + actix::Handler<ActorLifetime, Result = ()>,
     > NodeCommunication<T, A>
 where
-<A as Actor>::Context: ToEnvelope<A, T>,
-<A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
-<T as actix::Message>::Result: std::marker::Send,
+    <A as Actor>::Context: ToEnvelope<A, T>,
+    <A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
+    <T as actix::Message>::Result: std::marker::Send,
 {
     pub fn start(cancel: CancellationToken, me: NodeID, actor: Addr<A>) -> Arc<Self> {
         let (peer_tx, peer_rx) = mpsc::channel(256);
@@ -247,9 +247,9 @@ impl PeerComunication {
         response_bus: Arc<Mutex<HashMap<CorrelationID, oneshot::Sender<T>>>>,
     ) -> Self
     where
-    <A as Actor>::Context: ToEnvelope<A, T>,
-    <A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
-    <T as actix::Message>::Result: std::marker::Send,
+        <A as Actor>::Context: ToEnvelope<A, T>,
+        <A as Actor>::Context: ToEnvelope<A, ActorLifetime>,
+        <T as actix::Message>::Result: std::marker::Send,
     {
         Self {
             task_handle: tokio::spawn(Self::run(me, stream, cancel, tx, actor, response_bus)),

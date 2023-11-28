@@ -170,17 +170,20 @@ impl Handler<StoreMessage> for StoreActor {
                         debug!(format!("Remote stock {:?}", remote_stock.clone()));
                         debug!(format!("Stores: {:?}", stores_clone.keys()));
 
-                        let able_remote: Vec<u64> = self.stores.iter()
-                        .filter_map(|(store_id, info)|{
-                            if *store_id == self.self_id {
-                                return None;
-                            }
-                            if !info.is_online {
-                                return None;
-                            }
+                        let able_remote: Vec<u64> = self
+                            .stores
+                            .iter()
+                            .filter_map(|(store_id, info)| {
+                                if *store_id == self.self_id {
+                                    return None;
+                                }
+                                if !info.is_online {
+                                    return None;
+                                }
 
-                            Some(*store_id)
-                        }).collect();
+                                Some(*store_id)
+                            })
+                            .collect();
 
                         // Check other nodes for remaining stock in remote_stock
                         // If there is enough stock, reserve it and add it to involved_stock
@@ -218,8 +221,6 @@ impl Handler<StoreMessage> for StoreActor {
                             }
                         }
 
-                        
-
                         // If there is still stock in remote_stock, cancel the transaction
                         if !remote_stock.is_empty() {
                             return Some(Transaction {
@@ -234,7 +235,9 @@ impl Handler<StoreMessage> for StoreActor {
                             state: TransactionState::AwaitingConfirmation,
                             involved_stock,
                         };
-                        self_info.transactions.insert(new_transaction_id, transaction.clone());
+                        self_info
+                            .transactions
+                            .insert(new_transaction_id, transaction.clone());
                         self.stores.insert(self.self_id, self_info);
 
                         Some(transaction)
